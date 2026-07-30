@@ -1,0 +1,451 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+}
+
+// ============================================================
+// USERS & SETTINGS
+// ============================================================
+
+model User {
+  id          String   @id @default(cuid())
+  authId      String   @unique // Supabase auth.users.id
+  email       String   @unique
+  name        String?
+  phone       String?
+  upiId       String?
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  settings     UserSettings?
+  accounts     Account[]
+  transactions Transaction[]
+  people       Person[]
+  debtRecords  DebtRecord[]
+  settlements  Settlement[]
+  notifications Notification[]
+  importBatches ImportBatch[]
+  auditLogs    AuditLog[]
+  attachments  Attachment[]
+  categories   Category[]
+  personalLabels PersonalLabel[]
+
+  @@map("users")
+}
+
+model UserSettings {
+  id               String  @id @default(cuid())
+  userId           String  @unique
+  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  theme            String  @default("system") // "light" | "dark" | "system"
+  currency         String  @default("INR")
+  timezone         String  @default("Asia/Kolkata")
+  targetBalance    Float   @default(0)
+  defaultAccountId String?
+  reminderDays     Int     @default(7) // days before showing overdue badge
+  onboardingDone   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_settings")
+}
+
+// ============================================================
+// BANK ACCOUNTS
+// ============================================================
+
+model Account {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name           String   // "SBI Savings"
+  bank           String?  // "State Bank of India"
+  accountType    String   @default("savings") // "savings" | "current" | "cash_wallet" | "credit"
+  nickname       String?  // "Main Account"
+  accountNumber  String?  // masked last 4 digits
+  currentBalance Float    @default(0)
+  targetBalance  Float    @default(0)
+  openingBalance Float    @default(0)
+  color          String   @default("#6366f1") // hex color
+  icon           String   @default("bank") // lucide icon name
+  isDefault      Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  lastSyncedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  transactions Transaction[]
+  importBatches ImportBatch[]
+
+  @@map("accounts")
+}
+
+// ============================================================
+// TRANSACTIONS
+// ============================================================
+
+model Transaction {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId       String?
+  account         Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  importBatchId   String?
+  importBatch     ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+
+  // Core fields
+  date            DateTime
+  time            String?  // "HH:MM:SS" if available from statement
+  merchant        String?  // Extracted/cleaned merchant name
+  rawNarration    String?  // Original narration from bank
+  amount          Float
+  type            TransactionType  // DEBIT | CREDIT
+  runningBalance  Float?   // Balance after this transaction
+  referenceNumber String?  // Bank reference/UTR number
+
+  // Classification
+  categoryId      String?
+  category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  subcategory     String?
+  tags            String[]  @default([])
+  paymentMethod   String?   // "UPI" | "NEFT" | "IMPS" | "Cash" | "Card" etc.
+  notes           String?
+
+  // Import metadata
+  source          TransactionSource @default(MANUAL) // AA | CSV | PDF | EXCEL | MANUAL
+  bankTxnId       String?  // Bank's own transaction ID (for dedup)
+  importedAt      DateTime?
+
+  // Status
+  status          TransactionStatus @default(UNASSIGNED)
+  isRecoverable   Boolean @default(false)
+  isPersonal      Boolean @default(false) // explicitly marked not reimbursable
+
+  // Receipt
+  receiptUrl      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  debtTransactions DebtTransaction[]
+  attachments      Attachment[]
+  personalLabels   PersonalLabel[]
+
+  @@unique([userId, bankTxnId, accountId]) // deduplication
+  @@map("transactions")
+}
+
+enum TransactionType {
+  DEBIT
+  CREDIT
+}
+
+enum TransactionSource {
+  AA
+  CSV
+  PDF
+  EXCEL
+  MANUAL
+}
+
+enum TransactionStatus {
+  UNASSIGNED   // imported, not yet acted on
+  ASSIGNED     // linked to one or more debt records
+  PERSONAL     // marked as personal, not reimbursable
+  PARTIAL      // partially assigned, remainder unassigned
+}
+
+// ============================================================
+// IMPORT BATCHES
+// ============================================================
+
+model ImportBatch {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId    String?
+  account      Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  fileName     String
+  fileType     String   // "pdf" | "csv" | "xlsx"
+  bankDetected String?  // "SBI" | "HDFC" etc.
+  parserUsed   String?  // "SBIParser" | "GenericParser"
+  totalRows    Int      @default(0)
+  importedRows Int      @default(0)
+  skippedRows  Int      @default(0)  // duplicates
+  errorRows    Int      @default(0)
+  status       ImportStatus @default(PENDING)
+  errorMessage String?
+
+  importedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  // Relations
+  transactions Transaction[]
+
+  @@map("import_batches")
+}
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
+// ============================================================
+// PEOPLE (CONTACTS)
+// ============================================================
+
+model Person {
+  id           String  @id @default(cuid())
+  userId       String
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name         String
+  relationship String? // "Mom" | "Dad" | "Friend" | "Roommate" | "Colleague" | "Client" | "Other"
+  phone        String?
+  email        String?
+  upiId        String?
+  avatarUrl    String?
+  color        String  @default("#8b5cf6") // hex color for avatar bg
+  notes        String?
+  tags         String[] @default([])
+  isActive     Boolean @default(true)
+  isArchived   Boolean @default(false)
+  lastReminderAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  debtRecords DebtRecord[]
+
+  @@map("people")
+}
+
+// ============================================================
+// DEBT RECORDS
+// ============================================================
+
+model DebtRecord {
+  id              String  @id @default(cuid())
+  userId          String
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personId        String
+  person          Person  @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  title           String  // e.g., "Medicines for Dad" or auto-generated
+  totalAmount     Float
+  recoveredAmount Float   @default(0)
+  outstandingAmount Float // computed but stored for perf
+  status          DebtStatus @default(PENDING)
+
+  dueDate         DateTime?
+  notes           String?
+  categoryId      String?
+  category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  debtTransactions DebtTransaction[]
+  settlements      Settlement[]
+
+  @@map("debt_records")
+}
+
+enum DebtStatus {
+  PENDING
+  PARTIAL
+  SETTLED
+  CANCELLED
+  OVERDUE
+}
+
+// ============================================================
+// DEBT TRANSACTIONS (many-to-many: DebtRecord <-> Transaction)
+// ============================================================
+
+model DebtTransaction {
+  id            String  @id @default(cuid())
+  debtRecordId  String
+  debtRecord    DebtRecord  @relation(fields: [debtRecordId], references: [id], onDelete: Cascade)
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  assignedAmount Float  // may be partial (e.g., ₹200 of a ₹500 txn)
+  notes          String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([debtRecordId, transactionId])
+  @@map("debt_transactions")
+}
+
+// ============================================================
+// SETTLEMENTS (Payments received against debts)
+// ============================================================
+
+model Settlement {
+  id           String  @id @default(cuid())
+  userId       String
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  debtRecordId String
+  debtRecord   DebtRecord @relation(fields: [debtRecordId], references: [id], onDelete: Cascade)
+
+  amount       Float
+  method       SettlementMethod @default(CASH)
+  referenceId  String?  // UPI ref, cheque number etc.
+  notes        String?
+  settledAt    DateTime @default(now())
+
+  createdAt DateTime @default(now())
+
+  @@map("settlements")
+}
+
+enum SettlementMethod {
+  CASH
+  UPI
+  BANK_TRANSFER
+  CHEQUE
+  ADJUSTMENT
+  MANUAL
+}
+
+// ============================================================
+// CATEGORIES
+// ============================================================
+
+model Category {
+  id          String  @id @default(cuid())
+  userId      String?  // null = system default category
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  slug        String
+  icon        String  @default("tag") // lucide icon
+  color       String  @default("#64748b")
+  isDefault   Boolean @default(false)
+  isActive    Boolean @default(true)
+  keywords    String[] @default([]) // for auto-categorization
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  transactions Transaction[]
+  debtRecords  DebtRecord[]
+
+  @@unique([userId, slug])
+  @@map("categories")
+}
+
+// ============================================================
+// ATTACHMENTS
+// ============================================================
+
+model Attachment {
+  id            String  @id @default(cuid())
+  userId        String
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactionId String?
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  fileName      String
+  fileType      String
+  fileSize      Int
+  storageUrl    String  // Supabase Storage URL
+  thumbnailUrl  String?
+
+  createdAt DateTime @default(now())
+
+  @@map("attachments")
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+model Notification {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type      NotificationType
+  title     String
+  message   String
+  link      String?  // relative URL to navigate to
+  isRead    Boolean @default(false)
+  metadata  Json?   // extra data
+
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  IMPORT_COMPLETE
+  SETTLEMENT_RECEIVED
+  DEBT_OVERDUE
+  TARGET_REACHED
+  LARGE_EXPENSE
+  GENERAL
+}
+
+// ============================================================
+// AUDIT LOGS
+// ============================================================
+
+model AuditLog {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  action    String  // "CREATE_DEBT" | "RECORD_SETTLEMENT" | "IMPORT_STATEMENT" etc.
+  entity    String  // "DebtRecord" | "Settlement" | "Transaction"
+  entityId  String?
+  metadata  Json?
+
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+// ============================================================
+// PERSONAL LABELS
+// ============================================================
+
+model PersonalLabel {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name      String
+  color     String   @default("#64748b")
+  icon      String   @default("tag")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@map("personal_labels")
+}
