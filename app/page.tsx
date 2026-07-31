@@ -9,6 +9,13 @@ import { ArrowRight, FileText, QrCode, ShieldCheck, Users2, Wallet } from 'lucid
 export const metadata = {
   title: 'ReimburseMe — Personal Expense Recovery Platform',
   description: 'Track money spent on behalf of others, manage reimbursements, import bank statements, and project your true balance after pending recoveries.',
+  applicationName: 'ReimburseMe',
+  openGraph: {
+    title: 'ReimburseMe — Personal Expense Recovery',
+    description: 'Track recoverable expenses, assign to people, and get paid back faster.',
+    siteName: 'ReimburseMe',
+    type: 'website',
+  },
 }
 
 export default async function HomePage() {
@@ -22,6 +29,22 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#07090E] text-foreground font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
+      {/* Structured Data for Google Verification */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'SoftwareApplication',
+            name: 'ReimburseMe',
+            applicationCategory: 'FinanceApplication',
+            operatingSystem: 'Web',
+            url: 'https://reimburseme.adithyen.me',
+            description:
+              'ReimburseMe helps users track personal expense recoveries, manage shared debts, and parse bank statements.',
+          }),
+        }}
+      />
       {/* Navigation Header */}
       <header className="border-b border-white/10 bg-[#0B0F19]/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
