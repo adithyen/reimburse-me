@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { Logo } from '@/components/ui/logo'
 import { ArrowUpRight, FileText, QrCode, Users2 } from 'lucide-react'
 
@@ -42,8 +43,8 @@ export default function AuthLayout({
           <div className="pt-6 border-t border-white/5 flex items-center justify-between text-xs text-muted-foreground/60">
             <span>ReimburseMe © {new Date().getFullYear()}</span>
             <div className="flex items-center gap-4">
-              <a href="#" className="hover:text-foreground transition-colors">Privacy</a>
-              <a href="#" className="hover:text-foreground transition-colors">Terms</a>
+              <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
+              <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
             </div>
           </div>
         </div>
