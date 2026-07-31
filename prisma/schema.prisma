@@ -447,5 +447,6 @@ model PersonalLabel {
 
   transactions Transaction[]
 
+  @@unique([userId, name])
   @@map("personal_labels")
 }

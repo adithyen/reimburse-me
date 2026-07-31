@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { formatCurrency, formatDateShort, cn, truncate } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useUIStore } from '@/store/ui-store'
+import { PersonalLabelsDialog } from '@/components/transactions/personal-labels-dialog'
 
 type Transaction = {
   id: string
@@ -81,13 +82,7 @@ export default function TransactionsPage() {
     },
   })
 
-  const { data: labels } = useQuery({
-    queryKey: ['labels-list'],
-    queryFn: async () => {
-      const res = await fetch('/api/labels')
-      return (await res.json()).data as Label[]
-    },
-  })
+  
 
   const { data: people } = useQuery({
     queryKey: ['people-list'],
@@ -118,23 +113,7 @@ export default function TransactionsPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
-  const markPersonalMutation = useMutation({
-    mutationFn: async ({ txnId, labelIds }: { txnId: string; labelIds: string[] }) => {
-      const res = await fetch(`/api/transactions/${txnId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'PERSONAL', isPersonal: true, personalLabelIds: labelIds }),
-      })
-      if (!res.ok) throw new Error((await res.json()).error)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['transactions'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-      toast.success('Marked as personal')
-      setPersonalSheetOpen(false)
-      setPersonalTxn(null)
-    },
-  })
+  
 
   const unassignMutation = useMutation({
     mutationFn: async (txnId: string) => {
@@ -351,63 +330,15 @@ export default function TransactionsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Personal Labels Dialog */}
-      <Dialog open={personalSheetOpen} onOpenChange={setPersonalSheetOpen}>
-        <DialogContent className="sm:max-w-md p-5 flex flex-col gap-5">
-          <DialogHeader className="px-0 pb-0 flex-shrink-0">
-            <DialogTitle>Mark as Personal</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2 overflow-y-auto max-h-[50vh] pr-1">
-            {labels?.map((label) => (
-              <button
-                key={label.id}
-                onClick={() => {
-                  if (personalTxn) {
-                    markPersonalMutation.mutate({ txnId: personalTxn, labelIds: [label.id] })
-                  }
-                }}
-                className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-accent transition-colors border border-transparent hover:border-primary/20"
-              >
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm"
-                  style={{ backgroundColor: label.color }}
-                >
-                  <Tag className="h-4 w-4" />
-                </div>
-                <div className="text-left">
-                  <p className="font-medium text-foreground text-sm">{label.name}</p>
-                </div>
-              </button>
-            ))}
-            {(!labels || labels.length === 0) && (
-              <p className="text-sm text-muted-foreground text-center py-4">No personal labels found.</p>
-            )}
-            {/* Create new default labels if none exist */}
-            {(!labels || labels.length === 0) && (
-              <Button 
-                className="w-full mt-2" 
-                variant="outline" 
-                onClick={async () => {
-                   await fetch('/api/labels', { method: 'POST', body: JSON.stringify({ name: 'Self Expense', color: '#8b5cf6' }) });
-                   await fetch('/api/labels', { method: 'POST', body: JSON.stringify({ name: 'Business', color: '#f59e0b' }) });
-                   await fetch('/api/labels', { method: 'POST', body: JSON.stringify({ name: 'Ignore', color: '#64748b' }) });
-                   queryClient.invalidateQueries({ queryKey: ['labels-list'] });
-                }}
-              >
-                Create Default Labels
-              </Button>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
+      <PersonalLabelsDialog open={personalSheetOpen} onOpenChange={setPersonalSheetOpen} txnId={personalTxn} />
+      
       {/* Modals are handled globally */}
     </div>
   )
 }
 
 function TransactionList({
-  transactions, isLoading, selectedIds, onToggleSelect, onAssign, onMarkPersonal, showAssignActions,
+  transactions, isLoading, selectedIds, onToggleSelect, onAssign, onMarkPersonal, onUnassign, showAssignActions,
 }: {
   transactions: Transaction[]
   isLoading: boolean

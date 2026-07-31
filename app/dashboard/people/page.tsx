@@ -5,13 +5,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { Plus, Users, Phone, Mail, ExternalLink, Edit2, Archive, Search } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { formatCurrency, getInitials, getRandomColor, cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import Link from 'next/link'
@@ -56,7 +57,7 @@ export default function PeoplePage() {
     },
   })
 
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<PersonForm>({
+  const { register, handleSubmit, reset, watch, setValue, control, formState: { errors, isSubmitting } } = useForm<PersonForm>({
     resolver: zodResolver(personSchema),
     defaultValues: { color: getRandomColor() },
   })
@@ -130,10 +131,22 @@ export default function PeoplePage() {
 
                 <div>
                   <label className="text-xs font-medium text-foreground mb-1 block">Relationship</label>
-                  <select {...register('relationship')} className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-card focus:outline-none focus:ring-2 focus:ring-primary/50">
-                    <option value="">Select...</option>
-                    {RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
+                  <Controller
+                    control={control}
+                    name="relationship"
+                    render={({ field }) => (
+                      <Select onValueChange={field.onChange} value={field.value ?? null}>
+                        <SelectTrigger className="w-full bg-card h-[38px]">
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {RELATIONSHIPS.map((r) => (
+                            <SelectItem key={r} value={r}>{r}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
                 </div>
 
                 <div>

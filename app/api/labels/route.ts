@@ -34,8 +34,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Name is required' }, { status: 400 })
   }
 
-  const label = await prisma.personalLabel.create({
-    data: {
+  const label = await prisma.personalLabel.upsert({
+    where: {
+      userId_name: {
+        userId: user.id,
+        name: name.trim(),
+      }
+    },
+    update: {
+      color: color || '#64748b',
+      icon: icon || 'tag',
+    },
+    create: {
       userId: user.id,
       name: name.trim(),
       color: color || '#64748b',
