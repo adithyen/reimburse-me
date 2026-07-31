@@ -27,6 +27,11 @@ export const metadata: Metadata = {
     description: 'Track recoverable expenses, assign to people, and get paid back faster.',
     type: 'website',
   },
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
 }
 
 export const viewport: Viewport = {

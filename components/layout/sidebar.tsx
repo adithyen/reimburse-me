@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils'
 import { useUIStore } from '@/store/ui-store'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { LogoIcon, LogoText } from '@/components/ui/logo'
 
 const NAV_ITEMS = [
   {
@@ -93,9 +94,7 @@ export function Sidebar() {
     >
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-border min-h-[65px]">
-        <div className="w-9 h-9 rounded-xl gradient-brand flex items-center justify-center flex-shrink-0 shadow-lg shadow-primary/30">
-          <span className="text-white font-bold text-base">₹</span>
-        </div>
+        <LogoIcon size={34} />
         <AnimatePresence>
           {sidebarOpen && (
             <motion.div
@@ -104,10 +103,8 @@ export function Sidebar() {
               exit={{ opacity: 0, x: -10 }}
               transition={{ duration: 0.15 }}
             >
-              <span className="text-foreground font-bold text-base tracking-tight whitespace-nowrap">
-                ReimburseMe
-              </span>
-              <p className="text-muted-foreground text-[10px] leading-none mt-0.5">
+              <LogoText className="text-base leading-none" />
+              <p className="text-muted-foreground text-[10px] leading-none mt-1 font-medium">
                 Expense Recovery
               </p>
             </motion.div>
