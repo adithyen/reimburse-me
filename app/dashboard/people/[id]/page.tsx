@@ -85,7 +85,12 @@ export default function PersonDetailPage() {
     toast.loading('Generating receipt...')
     try {
       const res = await fetch(`/api/reports/person/${id}`)
-      if (!res.ok) throw new Error('Failed to generate')
+      const contentType = res.headers.get('content-type')
+      if (!res.ok || contentType?.includes('application/json')) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json.error || 'Failed to generate PDF')
+      }
+
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
 

@@ -7,7 +7,8 @@
  * - Total outstanding summary
  * - Itemized expenses table with 4 columns: DATE | TRANSACTION DESCRIPTION | CUSTOM LABEL | AMOUNT
  * - Category shown under description
- * - Em-dash '—' shown for unassigned custom labels
+ * - ASCII Hyphen '-' shown for unassigned custom labels
+ * - Pure ASCII text sanitization to guarantee 100% WinAnsi font compatibility without crash
  * - UPI QR code payment card
  */
 
@@ -88,7 +89,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     color: rgb(1, 1, 1),
   })
 
-  page.drawText('RM', {
+  page.drawText(cleanText('RM'), {
     x: margin + 8,
     y: height - 60,
     size: 16,
@@ -96,7 +97,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     color: BRAND_PRIMARY,
   })
 
-  page.drawText('ReimburseMe', {
+  page.drawText(cleanText('ReimburseMe'), {
     x: margin + 48,
     y: height - 52,
     size: 18,
@@ -104,7 +105,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     color: rgb(1, 1, 1),
   })
 
-  page.drawText('Personal Expense Recovery Platform', {
+  page.drawText(cleanText('Personal Expense Recovery Platform'), {
     x: margin + 48,
     y: height - 67,
     size: 9,
@@ -113,7 +114,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
   })
 
   // ---- RECEIPT TITLE & METADATA ----
-  page.drawText('EXPENSE RECEIPT', {
+  page.drawText(cleanText('EXPENSE RECEIPT'), {
     x: width - margin - 140,
     y: height - 48,
     size: 14,
@@ -121,7 +122,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     color: rgb(1, 1, 1),
   })
 
-  page.drawText(`Generated: ${formatDate(generatedAt)}`, {
+  page.drawText(cleanText(`Generated: ${formatDate(generatedAt)}`), {
     x: width - margin - 140,
     y: height - 64,
     size: 8.5,
@@ -130,7 +131,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
   })
 
   if (generatedBy) {
-    page.drawText(`By: ${generatedBy}`, {
+    page.drawText(cleanText(`By: ${generatedBy}`), {
       x: width - margin - 140,
       y: height - 78,
       size: 8.5,
@@ -158,7 +159,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     color: BRAND_PRIMARY,
   })
 
-  page.drawText('PREPARED FOR', {
+  page.drawText(cleanText('PREPARED FOR'), {
     x: margin + 14,
     y: y - 18,
     size: 8,
@@ -166,7 +167,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     color: MUTED,
   })
 
-  page.drawText(person.name, {
+  page.drawText(cleanText(person.name), {
     x: margin + 14,
     y: y - 36,
     size: 15,
@@ -176,7 +177,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
   const contactParts = [person.relationship, person.phone, person.email].filter(Boolean)
   if (contactParts.length > 0) {
-    page.drawText(contactParts.join('  ·  '), {
+    page.drawText(cleanText(contactParts.join('  -  ')), {
       x: margin + 14,
       y: y - 52,
       size: 9,
@@ -190,7 +191,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
   // ---- TOTAL OUTSTANDING SECTION (Clean Alignment) ----
   const totalOutstanding = debts.reduce((s, d) => s + d.outstandingAmount, 0)
 
-  page.drawText('TOTAL OUTSTANDING AMOUNT', {
+  page.drawText(cleanText('TOTAL OUTSTANDING AMOUNT'), {
     x: margin,
     y: y,
     size: 9,
@@ -200,7 +201,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
   y -= 22
 
-  page.drawText(formatCurrency(totalOutstanding), {
+  page.drawText(cleanText(formatCurrency(totalOutstanding)), {
     x: margin,
     y: y,
     size: 26,
@@ -220,7 +221,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
   y -= 20
 
   // ---- DEBT RECORDS TABLE ----
-  page.drawText('ITEMIZED EXPENSES', {
+  page.drawText(cleanText('ITEMIZED EXPENSES'), {
     x: margin,
     y,
     size: 9,
@@ -253,7 +254,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     { text: 'CUSTOM LABEL', x: cols.label + 6 },
     { text: 'AMOUNT', x: cols.amount + 6 },
   ].forEach(({ text, x }) => {
-    page.drawText(text, {
+    page.drawText(cleanText(text), {
       x,
       y: y - 12,
       size: 8,
@@ -264,15 +265,15 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
   y -= 22
 
-  // Table Rows (with 2 separate columns: Description & Custom Label)
+  // Table Rows
   let rowIndex = 0
   for (const debt of debts) {
     if (y < 120) break
 
     const rawNarration = debt.debtTransactions?.[0]?.transaction?.rawNarration
-    const descriptionText = rawNarration || debt.title || 'Transaction'
-    const labelText = (debt.title && debt.title !== rawNarration) ? debt.title : '—'
-    const catName = debt.category?.name || null
+    const descriptionText = cleanText(rawNarration || debt.title || 'Transaction')
+    const labelText = (debt.title && debt.title !== rawNarration) ? cleanText(debt.title) : '-'
+    const catName = debt.category?.name ? cleanText(debt.category.name) : null
 
     // Wrap lines
     const descLines = wrapText(descriptionText, 38)
@@ -297,7 +298,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     const amtStr = formatCurrency(debt.outstandingAmount)
 
     // Date
-    page.drawText(dateStr, {
+    page.drawText(cleanText(dateStr), {
       x: cols.date + 6,
       y: y - 10,
       size: 8,
@@ -306,7 +307,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     })
 
     // Amount
-    page.drawText(amtStr, {
+    page.drawText(cleanText(amtStr), {
       x: cols.amount + 6,
       y: y - 10,
       size: 8.5,
@@ -317,7 +318,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     // Description Column (Bank Narration + Category underneath)
     let descY = y - 10
     for (const line of descLines) {
-      page.drawText(line, {
+      page.drawText(cleanText(line), {
         x: cols.desc + 6,
         y: descY,
         size: 8.5,
@@ -328,7 +329,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     }
 
     if (catName) {
-      page.drawText(`Cat: ${catName}`, {
+      page.drawText(cleanText(`Cat: ${catName}`), {
         x: cols.desc + 6,
         y: descY - 1,
         size: 7.5,
@@ -337,15 +338,15 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
       })
     }
 
-    // Custom Label Column (Turf or '—')
+    // Custom Label Column (Turf or '-')
     let labelY = y - 10
     for (const line of labelLines) {
-      page.drawText(line, {
+      page.drawText(cleanText(line), {
         x: cols.label + 6,
         y: labelY,
         size: 8.5,
-        font: line === '—' ? regularFont : boldFont,
-        color: line === '—' ? MUTED : BRAND_PRIMARY,
+        font: line === '-' ? regularFont : boldFont,
+        color: line === '-' ? MUTED : BRAND_PRIMARY,
       })
       labelY -= 11
     }
@@ -370,14 +371,14 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     height: 22,
     color: rgb(0.92, 0.93, 0.98),
   })
-  page.drawText('TOTAL OUTSTANDING', {
+  page.drawText(cleanText('TOTAL OUTSTANDING'), {
     x: margin + 6,
     y: y - 13,
     size: 9,
     font: boldFont,
     color: BRAND_PRIMARY,
   })
-  page.drawText(formatCurrency(totalOutstanding), {
+  page.drawText(cleanText(formatCurrency(totalOutstanding)), {
     x: cols.amount + 6,
     y: y - 13,
     size: 11,
@@ -389,7 +390,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
   // ---- UPI QR CODE SECTION ----
   if (upiId && y > 140) {
-    page.drawText('PAYMENT QR CODE', {
+    page.drawText(cleanText('PAYMENT QR CODE'), {
       x: margin,
       y,
       size: 9,
@@ -401,9 +402,9 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     try {
       const qrDataUrl = await generateUPIQR({
         upiId,
-        name: generatedBy || 'ReimburseMe',
+        name: cleanText(generatedBy || 'ReimburseMe'),
         amount: totalOutstanding,
-        note: `Payment to ${generatedBy} via ReimburseMe`,
+        note: `Payment to ${cleanText(generatedBy || '')} via ReimburseMe`,
       })
 
       const base64 = qrDataUrl.split(',')[1]
@@ -418,21 +419,21 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
         height: qrSize,
       })
 
-      page.drawText(`UPI ID: ${upiId}`, {
+      page.drawText(cleanText(`UPI ID: ${upiId}`), {
         x: margin + qrSize + 14,
         y: y - 24,
         size: 9,
         font: boldFont,
         color: DARK,
       })
-      page.drawText('Scan with Google Pay, PhonePe, Paytm or any UPI App', {
+      page.drawText(cleanText('Scan with Google Pay, PhonePe, Paytm or any UPI App'), {
         x: margin + qrSize + 14,
         y: y - 38,
         size: 8,
         font: regularFont,
         color: MUTED,
       })
-      page.drawText(`Rs. ${totalOutstanding.toLocaleString('en-IN')}`, {
+      page.drawText(cleanText(`Rs. ${totalOutstanding.toLocaleString('en-IN')}`), {
         x: margin + qrSize + 14,
         y: y - 54,
         size: 14,
@@ -455,7 +456,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     color: BORDER,
   })
 
-  page.drawText('Generated by ReimburseMe · Personal Expense Recovery Platform', {
+  page.drawText(cleanText('Generated by ReimburseMe - Personal Expense Recovery Platform'), {
     x: margin,
     y: footerY - 14,
     size: 8,
@@ -463,7 +464,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     color: MUTED,
   })
 
-  page.drawText(`Document generated on ${formatDate(generatedAt)}`, {
+  page.drawText(cleanText(`Document generated on ${formatDate(generatedAt)}`), {
     x: width - margin - 170,
     y: footerY - 14,
     size: 8,
@@ -476,6 +477,17 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 }
 
 // ---- Helpers ----
+function cleanText(text: string | null | undefined): string {
+  if (!text) return ''
+  return text
+    .replace(/[—–]/g, '-')
+    .replace(/[··•]/g, ' - ')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/₹/g, 'Rs. ')
+    .replace(/[^\x20-\x7E]/g, '')
+}
+
 function formatDate(date: Date): string {
   const d = new Date(date)
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
