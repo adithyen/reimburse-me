@@ -197,17 +197,44 @@ function DebtCard({ debt, index, onEditLabel }: { debt: Debt; index: number; onE
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="font-semibold text-foreground text-sm">{debt.title}</p>
-                    <button
-                      onClick={() => onEditLabel(debt)}
-                      className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
-                      title="Edit Debt Label"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
+                  {(() => {
+                    const rawNarration = (debt as any).debtTransactions?.[0]?.transaction?.rawNarration
+                    const primaryDescription = rawNarration || debt.title
+                    const customLabel = (debt.title && debt.title !== rawNarration) ? debt.title : null
+
+                    return (
+                      <>
+                        <p className="font-semibold text-foreground text-sm leading-snug break-all">{primaryDescription}</p>
+                        <div className="mt-0.5 flex items-center gap-1.5 text-xs">
+                          <span className="text-muted-foreground text-[11px]">Label:</span>
+                          {customLabel ? (
+                            <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold text-[11px] flex items-center gap-1">
+                              {customLabel}
+                              <button
+                                onClick={() => onEditLabel(debt)}
+                                className="text-primary/70 hover:text-primary transition-colors p-0.5 ml-0.5"
+                                title="Edit Debt Label"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-[11px] flex items-center gap-1">
+                              —
+                              <button
+                                onClick={() => onEditLabel(debt)}
+                                className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                                title="Add Label"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </span>
+                          )}
+                        </div>
+                      </>
+                    )
+                  })()}
+                  <p className="text-xs text-muted-foreground mt-1">
                     <Link href={`/dashboard/people/${debt.person.id}`} className="hover:text-foreground transition-colors">
                       {debt.person.name}
                     </Link>

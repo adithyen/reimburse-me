@@ -1,12 +1,14 @@
 /**
  * PDF Receipt Generator using pdf-lib
  * Generates a professional, branded PDF receipt for debt collection.
- * Includes:
- * - Header with brand logo and generated date
+ * Features:
+ * - Header with brand logo and metadata
  * - Person details (Prepared For) with clean alignment
  * - Total outstanding summary
- * - Itemized debt records table with multi-line description & bank narration support
- * - Settlements & UPI QR code (if UPI ID provided)
+ * - Itemized expenses table with 4 columns: DATE | TRANSACTION DESCRIPTION | CUSTOM LABEL | AMOUNT
+ * - Category shown under description
+ * - Em-dash '—' shown for unassigned custom labels
+ * - UPI QR code payment card
  */
 
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
@@ -102,7 +104,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     color: rgb(1, 1, 1),
   })
 
-  page.drawText('Personal Expense Recovery', {
+  page.drawText('Personal Expense Recovery Platform', {
     x: margin + 48,
     y: height - 67,
     size: 9,
@@ -230,12 +232,11 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
   // Table Columns
   const cols = {
-    date: margin,
-    desc: margin + 75,
-    category: margin + 355,
-    amount: width - margin - 75,
+    date: margin,           // 45
+    desc: margin + 65,      // 110 (width ~205pt)
+    label: margin + 315,    // 360 (width ~100pt)
+    amount: width - margin - 75, // 475 (width ~75pt)
   }
-  const descWidth = cols.category - cols.desc - 10 // ~270pt for description column
 
   // Table Header Bar
   page.drawRectangle({
@@ -248,9 +249,9 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
   ;[
     { text: 'DATE', x: cols.date + 6 },
-    { text: 'DESCRIPTION & NARRATION', x: cols.desc + 6 },
-    { text: 'CATEGORY', x: cols.category + 6 },
-    { text: 'AMOUNT', x: cols.amount + 10 },
+    { text: 'TRANSACTION DESCRIPTION', x: cols.desc + 6 },
+    { text: 'CUSTOM LABEL', x: cols.label + 6 },
+    { text: 'AMOUNT', x: cols.amount + 6 },
   ].forEach(({ text, x }) => {
     page.drawText(text, {
       x,
@@ -263,22 +264,23 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
   y -= 22
 
-  // Table Rows (with multi-line text wrapping)
+  // Table Rows (with 2 separate columns: Description & Custom Label)
   let rowIndex = 0
   for (const debt of debts) {
     if (y < 120) break
 
-    // Linked bank narration if available and distinct from title
     const rawNarration = debt.debtTransactions?.[0]?.transaction?.rawNarration
-    const displayNarration = rawNarration && rawNarration !== debt.title ? rawNarration : null
+    const descriptionText = rawNarration || debt.title || 'Transaction'
+    const labelText = (debt.title && debt.title !== rawNarration) ? debt.title : '—'
+    const catName = debt.category?.name || null
 
-    // Wrap label lines and narration lines
-    const titleLines = wrapText(debt.title, 42)
-    const narrationLines = displayNarration ? wrapText(displayNarration, 54) : []
+    // Wrap lines
+    const descLines = wrapText(descriptionText, 38)
+    const labelLines = wrapText(labelText, 18)
 
-    const labelHeight = titleLines.length * 11
-    const narrationHeight = narrationLines.length * 9
-    const rowHeight = Math.max(24, labelHeight + (displayNarration ? narrationHeight + 4 : 0) + 10)
+    const descHeight = descLines.length * 11 + (catName ? 12 : 0)
+    const labelHeight = labelLines.length * 11
+    const rowHeight = Math.max(26, Math.max(descHeight, labelHeight) + 10)
 
     // Row zebra striping
     if (rowIndex % 2 === 0) {
@@ -292,7 +294,6 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     }
 
     const dateStr = formatDate(new Date(debt.createdAt))
-    const catStr = debt.category?.name || 'General'
     const amtStr = formatCurrency(debt.outstandingAmount)
 
     // Date
@@ -304,27 +305,18 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
       color: DARK,
     })
 
-    // Category
-    page.drawText(catStr, {
-      x: cols.category + 6,
-      y: y - 10,
-      size: 8,
-      font: regularFont,
-      color: MUTED,
-    })
-
     // Amount
     page.drawText(amtStr, {
-      x: cols.amount + 10,
+      x: cols.amount + 6,
       y: y - 10,
       size: 8.5,
       font: boldFont,
       color: DARK,
     })
 
-    // Description & Narration (Multi-line)
+    // Description Column (Bank Narration + Category underneath)
     let descY = y - 10
-    for (const line of titleLines) {
+    for (const line of descLines) {
       page.drawText(line, {
         x: cols.desc + 6,
         y: descY,
@@ -335,18 +327,27 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
       descY -= 11
     }
 
-    if (displayNarration) {
-      descY -= 2
-      for (const line of narrationLines) {
-        page.drawText(line, {
-          x: cols.desc + 6,
-          y: descY,
-          size: 7.5,
-          font: regularFont,
-          color: MUTED,
-        })
-        descY -= 9
-      }
+    if (catName) {
+      page.drawText(`Cat: ${catName}`, {
+        x: cols.desc + 6,
+        y: descY - 1,
+        size: 7.5,
+        font: regularFont,
+        color: MUTED,
+      })
+    }
+
+    // Custom Label Column (Turf or '—')
+    let labelY = y - 10
+    for (const line of labelLines) {
+      page.drawText(line, {
+        x: cols.label + 6,
+        y: labelY,
+        size: 8.5,
+        font: line === '—' ? regularFont : boldFont,
+        color: line === '—' ? MUTED : BRAND_PRIMARY,
+      })
+      labelY -= 11
     }
 
     y -= rowHeight
@@ -377,7 +378,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     color: BRAND_PRIMARY,
   })
   page.drawText(formatCurrency(totalOutstanding), {
-    x: cols.amount + 10,
+    x: cols.amount + 6,
     y: y - 13,
     size: 11,
     font: boldFont,

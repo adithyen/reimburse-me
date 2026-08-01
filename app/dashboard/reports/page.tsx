@@ -33,11 +33,21 @@ export default function ReportsPage() {
       if (!res.ok) throw new Error('Generation failed')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
+
+      const safeName = (selectedPerson?.name || 'debt').replace(/[^a-zA-Z0-9]/g, '_')
+      const filename = `receipt_${safeName}_${new Date().toISOString().split('T')[0]}.pdf`
+
       const a = document.createElement('a')
       a.href = url
-      a.download = `receipt_${new Date().toISOString().split('T')[0]}.pdf`
+      a.download = filename
+      document.body.appendChild(a)
       a.click()
-      URL.revokeObjectURL(url)
+
+      setTimeout(() => {
+        if (document.body.contains(a)) document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }, 1000)
+
       toast.dismiss()
       toast.success('Receipt downloaded!')
     } catch (e) {

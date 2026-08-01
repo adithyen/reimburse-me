@@ -88,11 +88,21 @@ export default function PersonDetailPage() {
       if (!res.ok) throw new Error('Failed to generate')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
+
+      const safeName = (data?.name || 'debt').replace(/[^a-zA-Z0-9]/g, '_')
+      const filename = `receipt_${safeName}_${new Date().toISOString().split('T')[0]}.pdf`
+
       const a = document.createElement('a')
       a.href = url
-      a.download = `receipt_${data?.name}_${new Date().toISOString().split('T')[0]}.pdf`
+      a.download = filename
+      document.body.appendChild(a)
       a.click()
-      URL.revokeObjectURL(url)
+
+      setTimeout(() => {
+        if (document.body.contains(a)) document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }, 1000)
+
       toast.dismiss()
       toast.success('Receipt downloaded!')
     } catch {
@@ -223,43 +233,70 @@ export default function PersonDetailPage() {
               notes: string | null
               category: { name: string; color: string } | null
               settlements: Array<{ id: string; amount: number; method: string; settledAt: string }>
-              debtTransactions: Array<{ transaction: { merchant: string | null; date: string; amount: number } }>
-            }) => (
-              <Card key={debt.id} className="finance-card">
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-medium text-foreground text-sm">{debt.title}</h3>
-                        <button
-                          onClick={() => { setEditingDebt({ id: debt.id, title: debt.title }); setEditLabelOpen(true) }}
-                          className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
-                          title="Edit Label"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <Badge
-                          variant="outline"
-                          className={cn('text-[10px] px-1.5 py-0', STATUS_STYLES[debt.status])}
-                        >
-                          {debt.status}
-                        </Badge>
-                        {debt.category && (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0" style={{ borderColor: `${debt.category.color}40`, color: debt.category.color }}>
-                            {debt.category.name}
+              debtTransactions: Array<{ transaction: { merchant: string | null; rawNarration?: string | null; date: string; amount: number } }>
+            }) => {
+              const rawNarration = debt.debtTransactions?.[0]?.transaction?.rawNarration
+              const primaryDescription = rawNarration || debt.title
+              const customLabel = (debt.title && debt.title !== rawNarration) ? debt.title : null
+
+              return (
+                <Card key={debt.id} className="finance-card">
+                  <CardContent className="pt-4 pb-4">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-semibold text-foreground text-sm leading-snug break-all">{primaryDescription}</h3>
+                          <Badge
+                            variant="outline"
+                            className={cn('text-[10px] px-1.5 py-0', STATUS_STYLES[debt.status])}
+                          >
+                            {debt.status}
                           </Badge>
+                          {debt.category && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0" style={{ borderColor: `${debt.category.color}40`, color: debt.category.color }}>
+                              {debt.category.name}
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Custom Label Display */}
+                        <div className="mt-1 flex items-center gap-1.5 text-xs">
+                          <span className="text-muted-foreground text-[11px]">Label:</span>
+                          {customLabel ? (
+                            <span className="px-2 py-0.5 rounded-md bg-primary/10 text-primary font-semibold text-xs flex items-center gap-1">
+                              {customLabel}
+                              <button
+                                onClick={() => { setEditingDebt({ id: debt.id, title: debt.title }); setEditLabelOpen(true) }}
+                                className="text-primary/70 hover:text-primary transition-colors p-0.5 ml-0.5"
+                                title="Edit Label"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              —
+                              <button
+                                onClick={() => { setEditingDebt({ id: debt.id, title: debt.title }); setEditLabelOpen(true) }}
+                                className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                                title="Add Label"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-[11px] text-muted-foreground mt-1">{formatDate(new Date(debt.createdAt))}</p>
+                        {debt.notes && <p className="text-xs text-muted-foreground mt-1 italic">{debt.notes}</p>}
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="font-bold text-foreground">{formatCurrency(debt.outstandingAmount)}</p>
+                        {debt.recoveredAmount > 0 && (
+                          <p className="text-xs text-emerald-500">+{formatCurrency(debt.recoveredAmount)} paid</p>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">{formatDate(new Date(debt.createdAt))}</p>
-                      {debt.notes && <p className="text-xs text-muted-foreground mt-1 italic">{debt.notes}</p>}
                     </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="font-bold text-foreground">{formatCurrency(debt.outstandingAmount)}</p>
-                      {debt.recoveredAmount > 0 && (
-                        <p className="text-xs text-emerald-500">+{formatCurrency(debt.recoveredAmount)} paid</p>
-                      )}
-                    </div>
-                  </div>
 
                   {/* Linked transactions */}
                   {debt.debtTransactions?.length > 0 && (
@@ -270,7 +307,7 @@ export default function PersonDetailPage() {
                           title={dt.transaction.rawNarration || undefined}
                           className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground"
                         >
-                          {dt.transaction.merchant || dt.transaction.rawNarration || 'Transaction'} · {formatCurrency(dt.transaction.amount)}
+                          {dt.transaction.rawNarration || dt.transaction.merchant || 'Transaction'} · {formatCurrency(dt.transaction.amount)}
                         </span>
                       ))}
                     </div>
@@ -345,7 +382,7 @@ export default function PersonDetailPage() {
                   </Sheet>
                 </CardContent>
               </Card>
-            ))}
+            )})}
           </div>
         )}
       </div>

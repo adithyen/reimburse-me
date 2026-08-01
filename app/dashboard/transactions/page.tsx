@@ -468,19 +468,19 @@ function TransactionList({
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-medium text-foreground truncate">
-                {txn.merchant || truncate(txn.rawNarration || 'Transaction', 45)}
+              <p className="text-sm font-semibold text-foreground truncate" title={txn.rawNarration || txn.merchant || 'Transaction'}>
+                {txn.rawNarration || txn.merchant || 'Transaction'}
               </p>
               {txn.category && (
                 <span
-                  className="text-[10px] px-1.5 py-0.5 rounded-full"
+                  className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
                   style={{ background: `${txn.category.color}15`, color: txn.category.color }}
                 >
                   {txn.category.name}
                 </span>
               )}
               {txn.debtTransactions?.[0] && (
-                <span className="text-[10px] text-primary">
+                <span className="text-[10px] text-primary font-medium">
                   → {txn.debtTransactions[0].debtRecord.person.name}
                 </span>
               )}
@@ -490,15 +490,22 @@ function TransactionList({
                 </span>
               ))}
             </div>
-            {txn.merchant && txn.rawNarration && txn.merchant !== txn.rawNarration && (
-              <p className="text-[11px] text-muted-foreground/80 truncate mt-0.5" title={txn.rawNarration}>
-                {txn.rawNarration}
-              </p>
-            )}
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              {formatDateShort(new Date(txn.date))} · {txn.source}
-              {txn.account && ` · ${txn.account.name}`}
-            </p>
+
+            {/* Custom Label subtitle */}
+            <div className="flex items-center gap-1.5 text-xs mt-0.5">
+              <span className="text-muted-foreground text-[11px]">Label:</span>
+              {txn.merchant && txn.merchant !== txn.rawNarration ? (
+                <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold text-[11px]">
+                  {txn.merchant}
+                </span>
+              ) : (
+                <span className="text-muted-foreground text-[11px]">—</span>
+              )}
+              <span className="text-muted-foreground/60 text-[11px] ml-1">
+                · {formatDateShort(new Date(txn.date))} · {txn.source}
+                {txn.account && ` · ${txn.account.name}`}
+              </span>
+            </div>
           </div>
 
           {/* Amount */}
