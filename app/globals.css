@@ -69,32 +69,32 @@
 }
 
 .dark {
-  /* Dark mode — premium dark fintech */
-  --background: 0 0% 15%;          /* Very dark navy */
+  /* Dark mode — sleek pitch black fintech */
+  --background: 0 0% 4%;           /* Rich pitch black (#0a0a0a) */
   --foreground: 0 0% 98%;
 
-  --card: 0 0% 21%;                /* Slightly lighter than bg */
+  --card: 0 0% 8%;                 /* Sleek dark card (#141414) */
   --card-foreground: 0 0% 98%;
 
-  --popover: 0 0% 21%;
+  --popover: 0 0% 8%;
   --popover-foreground: 0 0% 98%;
 
-  --primary: 0 0% 92%;            /* Brighter in dark mode */
-  --primary-foreground: 0 0% 21%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 0 0% 9%;
 
-  --secondary: 0 0% 27%;
+  --secondary: 0 0% 12%;
   --secondary-foreground: 0 0% 98%;
 
-  --muted: 0 0% 27%;
-  --muted-foreground: 0 0% 71%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 65%;
 
-  --accent: 0 0% 27%;
+  --accent: 0 0% 12%;
   --accent-foreground: 0 0% 98%;
 
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
 
-  --border: 0 0% 100% / 10%;
+  --border: 0 0% 100% / 12%;
   --input: 0 0% 100% / 15%;
   --ring: 0 0% 56%;
 
@@ -104,13 +104,13 @@
   --chart-4: 0 0% 37%;
   --chart-5: 0 0% 27%;
   --chart-6: 262 83% 63%;
-  --sidebar: 0 0% 21%;
+  --sidebar: 0 0% 5%;             /* Deep black sidebar (#0d0d0d) */
   --sidebar-foreground: 0 0% 98%;
   --sidebar-primary: 245 90% 60%;
   --sidebar-primary-foreground: 0 0% 98%;
-  --sidebar-accent: 0 0% 27%;
+  --sidebar-accent: 0 0% 12%;
   --sidebar-accent-foreground: 0 0% 98%;
-  --sidebar-border: 0 0% 100% / 10%;
+  --sidebar-border: 0 0% 100% / 12%;
   --sidebar-ring: 0 0% 56%;
 }
 

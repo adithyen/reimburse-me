@@ -145,7 +145,8 @@ export async function GET(request: Request) {
 
     // Balance calculations
     const totalCurrentBalance = (accounts || []).reduce((s, a) => s + (a.currentBalance || 0), 0)
-    const targetBalance = user.settings?.targetBalance || 0
+    const accountsTargetBalance = (accounts || []).reduce((s, a) => s + (a.targetBalance || 0), 0)
+    const targetBalance = accountsTargetBalance > 0 ? accountsTargetBalance : (user.settings?.targetBalance || 0)
     const pendingRecoveries = debtSummary?._sum?.outstandingAmount || 0
     const projectedBalance = totalCurrentBalance + pendingRecoveries
 
