@@ -77,7 +77,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
   })
 
   // ---- BRAND LOGO BADGE ----
-  page.drawRoundedRectangle({
+  page.drawRectangle({
     x: margin,
     y: height - 72,
     width: 38,
