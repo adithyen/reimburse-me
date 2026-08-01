@@ -1,19 +1,10 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getOrCreateAuthUser } from '@/lib/auth-user'
 import { prisma } from '@/lib/prisma'
-
-async function getAuthUser() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const dbUser = await prisma.user.findUnique({ where: { authId: user.id } })
-  return dbUser
-}
 
 // GET /api/accounts — list all accounts
 export async function GET() {
-  const user = await getAuthUser()
+  const user = await getOrCreateAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const accounts = await prisma.account.findMany({
@@ -26,7 +17,7 @@ export async function GET() {
 
 // POST /api/accounts — create account
 export async function POST(request: Request) {
-  const user = await getAuthUser()
+  const user = await getOrCreateAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()

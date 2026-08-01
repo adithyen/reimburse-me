@@ -27,9 +27,45 @@ export function Header() {
   const [mounted, setMounted] = useState(false)
   const { theme, setTheme } = useTheme()
 
+  const [userProfile, setUserProfile] = useState<{ name: string; avatarUrl: string | null; email?: string } | null>(null)
+
   useEffect(() => {
     setMounted(true)
+
+    async function loadUserProfile() {
+      try {
+        // Try fetching from our API route first
+        const res = await fetch('/api/user/me')
+        if (res.ok) {
+          const json = await res.json()
+          if (json.data) {
+            setUserProfile({
+              name: json.data.name || 'User',
+              avatarUrl: json.data.avatarUrl,
+              email: json.data.email,
+            })
+            return
+          }
+        }
+
+        // Fallback to client-side Supabase metadata
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const meta = user.user_metadata || {}
+          setUserProfile({
+            name: meta.full_name || meta.name || user.email?.split('@')[0] || 'User',
+            avatarUrl: meta.avatar_url || meta.picture || null,
+            email: user.email,
+          })
+        }
+      } catch (err) {
+        console.error('Failed to load user profile in header:', err)
+      }
+    }
+
+    loadUserProfile()
   }, [])
+
   const { setSearchOpen, setImportModalOpen, unreadNotifications } = useUIStore()
 
   const handleLogout = async () => {
@@ -46,6 +82,16 @@ export function Header() {
   }
 
   const nextTheme = theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light'
+
+  const initials = userProfile?.name
+    ? userProfile.name
+        .split(' ')
+        .filter(Boolean)
+        .map((n) => n[0])
+        .join('')
+        .substring(0, 2)
+        .toUpperCase()
+    : 'U'
 
   return (
     <header className="h-[65px] flex items-center justify-between px-6 border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-20">
@@ -119,11 +165,13 @@ export function Header() {
 
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-xl hover:bg-accent transition-colors border border-transparent hover:border-border">
-            <Avatar className="h-7 w-7">
-              <AvatarImage src="" />
-              <AvatarFallback className="text-xs gradient-brand text-white font-bold">U</AvatarFallback>
+            <Avatar className="h-7 w-7 border border-border/50">
+              <AvatarImage src={userProfile?.avatarUrl || undefined} alt={userProfile?.name || 'Account'} />
+              <AvatarFallback className="text-xs gradient-brand text-white font-bold">{initials}</AvatarFallback>
             </Avatar>
-            <span className="text-sm font-medium text-foreground hidden sm:block">Account</span>
+            <span className="text-sm font-medium text-foreground hidden sm:block truncate max-w-[120px]">
+              {userProfile?.name || 'Account'}
+            </span>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">My Account</DropdownMenuLabel>
