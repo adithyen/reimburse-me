@@ -371,7 +371,7 @@ export default function TransactionsPage() {
       <PersonalLabelsDialog
         open={personalSheetOpen}
         onOpenChange={setPersonalSheetOpen}
-        transactionId={personalTxn}
+        txnId={personalTxn}
       />
 
       {/* Manual Add Transaction Dialog */}
