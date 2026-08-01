@@ -52,8 +52,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Disposition': `inline; filename="${filename}"`,
       'Content-Length': String(pdfBytes.length),
+      'Cache-Control': 'no-store',
     },
   })
 }
