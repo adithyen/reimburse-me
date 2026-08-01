@@ -10,21 +10,48 @@ export async function getOrCreateAuthUser() {
 
   if (!authUser) return null
 
+  const metadata = authUser.user_metadata || {}
+  const googleAvatar = metadata.avatar_url || metadata.picture || null
+  const googleName = metadata.name || metadata.full_name || authUser.email?.split('@')[0] || 'User'
+
+  // 1. Try finding user by authId (Supabase auth.users.id)
   let user = await prisma.user.findUnique({
     where: { authId: authUser.id },
     include: { settings: true },
   })
 
-  const metadata = authUser.user_metadata || {}
-  const googleAvatar = metadata.avatar_url || metadata.picture || null
-  const googleName = metadata.name || metadata.full_name || authUser.email?.split('@')[0] || 'User'
+  // 2. If not found by authId, try finding user by email to link accounts
+  if (!user && authUser.email) {
+    user = await prisma.user.findUnique({
+      where: { email: authUser.email },
+      include: { settings: true },
+    })
 
-  if (!user) {
+    if (user) {
+      // Link the new Google OAuth authId to the existing database user
+      try {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            authId: authUser.id,
+            ...(googleAvatar ? { avatarUrl: googleAvatar } : {}),
+            ...(googleName && (!user.name || user.name === 'User') ? { name: googleName } : {}),
+          },
+          include: { settings: true },
+        })
+      } catch (e) {
+        console.error('Error linking authId to existing user:', e)
+      }
+    }
+  }
+
+  // 3. If still not found, create a new user record
+  if (!user && authUser.email) {
     try {
       user = await prisma.user.create({
         data: {
           authId: authUser.id,
-          email: authUser.email!,
+          email: authUser.email,
           name: googleName,
           avatarUrl: googleAvatar,
           settings: {
@@ -55,13 +82,14 @@ export async function getOrCreateAuthUser() {
       })
     } catch (e) {
       console.error('Error auto-creating user in getOrCreateAuthUser:', e)
-      user = await prisma.user.findUnique({
-        where: { authId: authUser.id },
+      // Fallback: try finding by authId or email once more
+      user = await prisma.user.findFirst({
+        where: { OR: [{ authId: authUser.id }, { email: authUser.email }] },
         include: { settings: true },
       })
     }
-  } else {
-    // If user exists, check if name or avatarUrl needs updating from Google metadata
+  } else if (user) {
+    // 4. Update avatar or name if needed
     const needsAvatarUpdate = googleAvatar && user.avatarUrl !== googleAvatar
     const needsNameUpdate = googleName && (!user.name || user.name === 'User')
 
