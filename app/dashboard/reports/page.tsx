@@ -29,21 +29,37 @@ export default function ReportsPage() {
     setIsGenerating(true)
     const toastId = toast.loading('Generating PDF receipt...')
     try {
-      // Direct navigation — Chrome uses Content-Disposition filename from server
-      const safeName = (selectedPerson?.name || 'receipt').replace(/[^a-zA-Z0-9]/g, '_')
-      const link = document.createElement('a')
-      link.href = `/api/reports/person/${personId}`
-      link.download = `receipt_${safeName}_${new Date().toISOString().split('T')[0]}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+      const res = await fetch(`/api/reports/person/${personId}`)
+      if (!res.ok) {
+        toast.dismiss(toastId)
+        toast.error('Failed to generate receipt')
+        return
+      }
+
+      const buffer = await res.arrayBuffer()
+      const blob = new Blob([buffer], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+
+      const safeName = (selectedPerson?.name || 'debt').replace(/[^a-zA-Z0-9]/g, '_')
+      const filename = `receipt_${safeName}_${new Date().toISOString().split('T')[0]}.pdf`
+
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.setAttribute('download', filename)
+      document.body.appendChild(a)
+      a.click()
+
+      setTimeout(() => {
+        if (document.body.contains(a)) document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }, 3000)
 
       toast.dismiss(toastId)
       toast.success('Receipt downloaded!')
-    } catch (e: unknown) {
+    } catch {
       toast.dismiss(toastId)
-      const msg = e instanceof Error ? e.message : String(e)
-      toast.error(`Failed: ${msg}`)
+      toast.error('Download failed')
     } finally {
       setIsGenerating(false)
     }

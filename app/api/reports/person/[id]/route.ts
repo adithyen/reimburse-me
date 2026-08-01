@@ -29,32 +29,31 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   if (!person) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  let pdfBytes: Buffer
   try {
-    pdfBytes = await generatePersonReceipt({
+    const pdfBytes = await generatePersonReceipt({
       person,
       debts: person.debtRecords,
       generatedBy: user.name || user.email,
       upiId: user.upiId || undefined,
       generatedAt: new Date(),
     })
+
+    const safeName = person.name.replace(/[^a-zA-Z0-9]/g, '_')
+    const dateStr = new Date().toISOString().split('T')[0]
+    const filename = `receipt_${safeName}_${dateStr}.pdf`
+
+    return new NextResponse(new Uint8Array(pdfBytes), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+        'Content-Length': String(pdfBytes.length),
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+      },
+    })
   } catch (e: unknown) {
     const errMsg = e instanceof Error ? e.message : String(e)
-    console.error('[PDF] generatePersonReceipt threw:', errMsg)
+    console.error('[PDF] generatePersonReceipt error:', errMsg)
     return NextResponse.json({ error: 'PDF generation failed', detail: errMsg }, { status: 500 })
   }
-
-  const safeName = person.name.replace(/[^a-zA-Z0-9]/g, '_')
-  const dateStr = new Date().toISOString().split('T')[0]
-  const filename = `receipt_${safeName}_${dateStr}.pdf`
-
-  return new NextResponse(new Uint8Array(pdfBytes), {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-      'Content-Length': String(pdfBytes.length),
-      'Cache-Control': 'no-store',
-    },
-  })
 }
