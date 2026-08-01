@@ -253,9 +253,13 @@ export default function PersonDetailPage() {
                   {/* Linked transactions */}
                   {debt.debtTransactions?.length > 0 && (
                     <div className="flex gap-1.5 flex-wrap mb-3">
-                      {debt.debtTransactions.slice(0, 3).map((dt: { transaction: { merchant: string | null; date: string; amount: number } }, i: number) => (
-                        <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                          {dt.transaction.merchant || 'Transaction'} · {formatCurrency(dt.transaction.amount)}
+                      {debt.debtTransactions.slice(0, 5).map((dt: { transaction: { merchant: string | null; rawNarration?: string | null; date: string; amount: number } }, i: number) => (
+                        <span
+                          key={i}
+                          title={dt.transaction.rawNarration || undefined}
+                          className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground"
+                        >
+                          {dt.transaction.merchant || dt.transaction.rawNarration || 'Transaction'} · {formatCurrency(dt.transaction.amount)}
                         </span>
                       ))}
                     </div>

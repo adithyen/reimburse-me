@@ -81,13 +81,14 @@ export async function POST(
     update: { assignedAmount: amount, notes: notes || null },
   })
 
-  // Update transaction status
+  // Update transaction status and merchant title
   const remainingAmount = transaction.amount - amount
   await prisma.transaction.update({
     where: { id },
     data: {
       status: remainingAmount <= 0 ? 'ASSIGNED' : 'PARTIAL',
       isRecoverable: true,
+      ...(title ? { merchant: title.trim() } : {}),
     },
   })
 

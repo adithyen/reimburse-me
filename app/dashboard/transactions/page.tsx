@@ -18,6 +18,7 @@ import { formatCurrency, formatDateShort, cn, truncate } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useUIStore } from '@/store/ui-store'
 import { PersonalLabelsDialog } from '@/components/transactions/personal-labels-dialog'
+import { AddTransactionModal } from '@/components/transactions/add-transaction-modal'
 
 type Transaction = {
   id: string
@@ -52,8 +53,10 @@ export default function TransactionsPage() {
   const [tab, setTab] = useState<'inbox' | 'all'>('inbox')
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [addModalOpen, setAddModalOpen] = useState(false)
   const [assignSheetOpen, setAssignSheetOpen] = useState(false)
   const [assigningTxn, setAssigningTxn] = useState<string | null>(null)
+  const [assignTitle, setAssignTitle] = useState('')
   const [personalSheetOpen, setPersonalSheetOpen] = useState(false)
   const [personalTxn, setPersonalTxn] = useState<string | null>(null)
   const [page, setPage] = useState(1)
@@ -82,8 +85,6 @@ export default function TransactionsPage() {
     },
   })
 
-  
-
   const { data: people } = useQuery({
     queryKey: ['people-list'],
     queryFn: async () => {
@@ -93,11 +94,11 @@ export default function TransactionsPage() {
   })
 
   const assignMutation = useMutation({
-    mutationFn: async ({ txnId, personId }: { txnId: string; personId: string }) => {
+    mutationFn: async ({ txnId, personId, title }: { txnId: string; personId: string; title?: string }) => {
       const res = await fetch(`/api/transactions/${txnId}/assign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personId }),
+        body: JSON.stringify({ personId, title: title || undefined }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
       return res.json()
@@ -108,6 +109,7 @@ export default function TransactionsPage() {
       toast.success('Transaction assigned!')
       setAssignSheetOpen(false)
       setAssigningTxn(null)
+      setAssignTitle('')
       setSelectedIds(new Set())
     },
     onError: (e: Error) => toast.error(e.message),
@@ -149,6 +151,13 @@ export default function TransactionsPage() {
       .catch((e) => toast.error(e.message))
   }
 
+  const handleAssign = (txnId: string) => {
+    const txn = transactions.find((t: any) => t.id === txnId)
+    setAssigningTxn(txnId)
+    setAssignTitle(txn?.merchant || '')
+    setAssignSheetOpen(true)
+  }
+
   return (
     <div className="space-y-5 max-w-5xl">
       {/* Header */}
@@ -170,7 +179,11 @@ export default function TransactionsPage() {
           >
             <Upload className="h-4 w-4" /> Import Statement
           </Button>
-          <Button size="sm" className="gap-2 gradient-brand text-white border-0 shadow-lg shadow-primary/20">
+          <Button
+            size="sm"
+            onClick={() => setAddModalOpen(true)}
+            className="gap-2 gradient-brand text-white border-0 shadow-lg shadow-primary/20"
+          >
             <Plus className="h-4 w-4" /> Add Manual
           </Button>
         </div>
@@ -199,36 +212,44 @@ export default function TransactionsPage() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="flex items-center gap-3 p-3 rounded-xl bg-primary/10 border border-primary/20"
+            className="flex items-center justify-between p-3 rounded-xl gradient-brand text-white shadow-lg"
           >
-            <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
-            <button
-              onClick={() => setAssignSheetOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium gradient-brand text-white"
-            >
-              <UserPlus className="h-3.5 w-3.5" /> Assign to Person
-            </button>
-            <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-muted-foreground hover:text-foreground">
-              <X className="h-4 w-4" />
-            </button>
+            <span className="text-sm font-medium">{selectedIds.size} selected</span>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="text-xs gap-1"
+                onClick={() => { setAssigningTxn(null); setAssignTitle(''); setAssignSheetOpen(true) }}
+              >
+                <UserPlus className="h-3.5 w-3.5" /> Assign Selected
+              </Button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-xs text-white/80 hover:text-white underline ml-2"
+              >
+                Clear
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Tabs */}
-      <Tabs value={tab} onValueChange={(v) => { setTab(v as 'inbox' | 'all'); setPage(1); setSelectedIds(new Set()) }}>
-        <TabsList className="bg-card border border-border">
-          <TabsTrigger value="inbox" className="gap-2 data-[state=active]:bg-primary/15 data-[state=active]:text-primary">
-            <Inbox className="h-3.5 w-3.5" />
+      <Tabs value={tab} onValueChange={(v) => { setTab(v as any); setPage(1); setSelectedIds(new Set()) }}>
+        <TabsList>
+          <TabsTrigger value="inbox" className="gap-2">
+            <Inbox className="h-4 w-4" />
             Inbox
             {meta.unassignedCount > 0 && (
-              <Badge className="ml-1 text-[10px] h-4 px-1.5 bg-amber-500/20 text-amber-500 border-amber-500/30">
+              <Badge variant="secondary" className="ml-1 text-[10px] bg-primary/20 text-primary border-0">
                 {meta.unassignedCount}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="all" className="gap-2 data-[state=active]:bg-primary/15 data-[state=active]:text-primary">
-            <List className="h-3.5 w-3.5" /> All Transactions
+          <TabsTrigger value="all" className="gap-2">
+            <List className="h-4 w-4" />
+            All Transactions
           </TabsTrigger>
         </TabsList>
 
@@ -238,7 +259,7 @@ export default function TransactionsPage() {
             isLoading={isLoading}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
-            onAssign={(txnId) => { setAssigningTxn(txnId); setAssignSheetOpen(true) }}
+            onAssign={handleAssign}
             onMarkPersonal={(txnId) => { setPersonalTxn(txnId); setPersonalSheetOpen(true) }}
             onUnassign={(txnId) => unassignMutation.mutate(txnId)}
             showAssignActions
@@ -251,7 +272,7 @@ export default function TransactionsPage() {
             isLoading={isLoading}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
-            onAssign={(txnId) => { setAssigningTxn(txnId); setAssignSheetOpen(true) }}
+            onAssign={handleAssign}
             onMarkPersonal={(txnId) => { setPersonalTxn(txnId); setPersonalSheetOpen(true) }}
             onUnassign={(txnId) => unassignMutation.mutate(txnId)}
             showAssignActions={false}
@@ -270,7 +291,7 @@ export default function TransactionsPage() {
 
       {/* Assign Dialog */}
       <Dialog open={assignSheetOpen} onOpenChange={setAssignSheetOpen}>
-        <DialogContent className="sm:max-w-md p-5 flex flex-col gap-5">
+        <DialogContent className="sm:max-w-md p-5 flex flex-col gap-4">
           <DialogHeader className="px-0 pb-0 flex-shrink-0">
             <DialogTitle>Assign to Person</DialogTitle>
           </DialogHeader>
@@ -284,7 +305,7 @@ export default function TransactionsPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex flex-col min-w-0">
                     <span className="text-sm font-medium truncate">{txn.merchant || txn.rawNarration}</span>
-                    <span className="text-xs text-muted-foreground">{formatDateShort(txn.date)}</span>
+                    <span className="text-xs text-muted-foreground">{formatDateShort(new Date(txn.date))}</span>
                   </div>
                   <span className={`text-sm font-bold ${txn.type === 'CREDIT' ? 'text-color-success' : ''}`}>
                     {txn.type === 'CREDIT' ? '+' : '-'}{formatCurrency(txn.amount)}
@@ -298,13 +319,29 @@ export default function TransactionsPage() {
             )}
           </div>
 
-          <div className="space-y-2 overflow-y-auto max-h-[50vh] pr-1">
+          {/* Label / Title input */}
+          {assigningTxn && (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1">
+                Transaction Label / Title (Optional)
+              </label>
+              <input
+                type="text"
+                value={assignTitle}
+                onChange={(e) => setAssignTitle(e.target.value)}
+                placeholder="e.g. Movie Ticket, Medicine, Dinner"
+                className="w-full px-3.5 py-2 text-sm rounded-lg border border-border bg-card focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+          )}
+
+          <div className="space-y-2 overflow-y-auto max-h-[45vh] pr-1">
             {people?.map((person) => (
               <button
                 key={person.id}
                 onClick={() => {
                   if (assigningTxn) {
-                    assignMutation.mutate({ txnId: assigningTxn, personId: person.id })
+                    assignMutation.mutate({ txnId: assigningTxn, personId: person.id, title: assignTitle.trim() || undefined })
                   } else {
                     handleBulkAssign(person.id)
                   }
@@ -330,9 +367,18 @@ export default function TransactionsPage() {
         </DialogContent>
       </Dialog>
 
-      <PersonalLabelsDialog open={personalSheetOpen} onOpenChange={setPersonalSheetOpen} txnId={personalTxn} />
-      
-      {/* Modals are handled globally */}
+      {/* Personal Labels Dialog */}
+      <PersonalLabelsDialog
+        open={personalSheetOpen}
+        onOpenChange={setPersonalSheetOpen}
+        transactionId={personalTxn}
+      />
+
+      {/* Manual Add Transaction Dialog */}
+      <AddTransactionModal
+        open={addModalOpen}
+        onOpenChange={setAddModalOpen}
+      />
     </div>
   )
 }
@@ -399,11 +445,10 @@ function TransactionList({
               : <ArrowUpCircle className="h-4 w-4 text-primary" />}
           </div>
 
-          {/* Details */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-medium text-foreground truncate">
-                {txn.merchant || truncate(txn.rawNarration || 'Transaction', 40)}
+                {txn.merchant || truncate(txn.rawNarration || 'Transaction', 45)}
               </p>
               {txn.category && (
                 <span
@@ -424,6 +469,11 @@ function TransactionList({
                 </span>
               ))}
             </div>
+            {txn.merchant && txn.rawNarration && txn.merchant !== txn.rawNarration && (
+              <p className="text-[11px] text-muted-foreground/80 truncate mt-0.5" title={txn.rawNarration}>
+                {txn.rawNarration}
+              </p>
+            )}
             <p className="text-[11px] text-muted-foreground mt-0.5">
               {formatDateShort(new Date(txn.date))} · {txn.source}
               {txn.account && ` · ${txn.account.name}`}

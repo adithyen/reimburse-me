@@ -100,6 +100,7 @@ export async function POST(request: Request) {
     accountId,
     paymentMethod,
     notes,
+    rawNarration,
     isRecoverable,
     tags,
   } = body
@@ -113,6 +114,7 @@ export async function POST(request: Request) {
       userId: user.id,
       date: new Date(date),
       merchant: merchant || null,
+      rawNarration: rawNarration || null,
       amount: parseFloat(amount),
       type,
       categoryId: categoryId || null,
