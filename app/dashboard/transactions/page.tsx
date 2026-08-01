@@ -19,6 +19,7 @@ import { toast } from 'sonner'
 import { useUIStore } from '@/store/ui-store'
 import { PersonalLabelsDialog } from '@/components/transactions/personal-labels-dialog'
 import { AddTransactionModal } from '@/components/transactions/add-transaction-modal'
+import { EditLabelModal } from '@/components/transactions/edit-label-modal'
 
 type Transaction = {
   id: string
@@ -54,6 +55,8 @@ export default function TransactionsPage() {
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [addModalOpen, setAddModalOpen] = useState(false)
+  const [editLabelOpen, setEditLabelOpen] = useState(false)
+  const [editingTxn, setEditingTxn] = useState<{ id: string; merchant: string | null; rawNarration: string | null } | null>(null)
   const [assignSheetOpen, setAssignSheetOpen] = useState(false)
   const [assigningTxn, setAssigningTxn] = useState<string | null>(null)
   const [assignTitle, setAssignTitle] = useState('')
@@ -158,6 +161,11 @@ export default function TransactionsPage() {
     setAssignSheetOpen(true)
   }
 
+  const handleOpenEditLabel = (txn: Transaction) => {
+    setEditingTxn({ id: txn.id, merchant: txn.merchant, rawNarration: txn.rawNarration })
+    setEditLabelOpen(true)
+  }
+
   return (
     <div className="space-y-5 max-w-5xl">
       {/* Header */}
@@ -260,6 +268,7 @@ export default function TransactionsPage() {
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onAssign={handleAssign}
+            onEditLabel={handleOpenEditLabel}
             onMarkPersonal={(txnId) => { setPersonalTxn(txnId); setPersonalSheetOpen(true) }}
             onUnassign={(txnId) => unassignMutation.mutate(txnId)}
             showAssignActions
@@ -273,6 +282,7 @@ export default function TransactionsPage() {
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onAssign={handleAssign}
+            onEditLabel={handleOpenEditLabel}
             onMarkPersonal={(txnId) => { setPersonalTxn(txnId); setPersonalSheetOpen(true) }}
             onUnassign={(txnId) => unassignMutation.mutate(txnId)}
             showAssignActions={false}
@@ -379,18 +389,29 @@ export default function TransactionsPage() {
         open={addModalOpen}
         onOpenChange={setAddModalOpen}
       />
+
+      {/* Edit Label Modal */}
+      <EditLabelModal
+        open={editLabelOpen}
+        onOpenChange={setEditLabelOpen}
+        targetType="transaction"
+        targetId={editingTxn?.id || null}
+        initialLabel={editingTxn?.merchant}
+        rawNarration={editingTxn?.rawNarration}
+      />
     </div>
   )
 }
 
 function TransactionList({
-  transactions, isLoading, selectedIds, onToggleSelect, onAssign, onMarkPersonal, onUnassign, showAssignActions,
+  transactions, isLoading, selectedIds, onToggleSelect, onAssign, onEditLabel, onMarkPersonal, onUnassign, showAssignActions,
 }: {
   transactions: Transaction[]
   isLoading: boolean
   selectedIds: Set<string>
   onToggleSelect: (id: string) => void
   onAssign: (id: string) => void
+  onEditLabel: (txn: Transaction) => void
   onMarkPersonal: (id: string) => void
   onUnassign: (id: string) => void
   showAssignActions: boolean
@@ -488,7 +509,14 @@ function TransactionList({
           </div>
 
           {/* Actions (visible on hover) */}
-          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+            <button
+              onClick={() => onEditLabel(txn)}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-muted text-foreground hover:bg-accent transition-colors"
+              title="Edit Transaction Label"
+            >
+              <Tag className="h-3 w-3 text-primary" /> Label
+            </button>
             {(showAssignActions || txn.status === 'UNASSIGNED') ? (
               <>
                 <button

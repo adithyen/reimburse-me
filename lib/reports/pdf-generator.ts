@@ -2,15 +2,14 @@
  * PDF Receipt Generator using pdf-lib
  * Generates a professional, branded PDF receipt for debt collection.
  * Includes:
- * - Header with brand and generated date
- * - Person details
- * - Itemized debt records table
- * - Settlement history
- * - Total outstanding
- * - UPI QR code (if UPI ID provided)
+ * - Header with brand logo and generated date
+ * - Person details (Prepared For) with clean alignment
+ * - Total outstanding summary
+ * - Itemized debt records table with multi-line description & bank narration support
+ * - Settlements & UPI QR code (if UPI ID provided)
  */
 
-import { PDFDocument, StandardFonts, rgb, PDFPage, PDFFont } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { generateUPIQR } from '@/lib/qr'
 
 interface DebtForReport {
@@ -55,89 +54,111 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
   const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica)
 
-  const margin = 50
+  const margin = 45
   const contentWidth = width - 2 * margin
 
-  // Colors
-  const BRAND_COLOR = rgb(0.38, 0.40, 0.95) // indigo
-  const DARK = rgb(0.08, 0.08, 0.12)
-  const MUTED = rgb(0.5, 0.5, 0.55)
-  const BORDER = rgb(0.88, 0.88, 0.92)
-  const SUCCESS_COLOR = rgb(0.13, 0.77, 0.37)
-  const BG_LIGHT = rgb(0.97, 0.97, 1.0)
+  // Palette
+  const BRAND_PRIMARY = rgb(0.38, 0.40, 0.95) // Indigo
+  const DARK = rgb(0.08, 0.09, 0.12)
+  const MUTED = rgb(0.45, 0.47, 0.55)
+  const BORDER = rgb(0.88, 0.89, 0.93)
+  const SUCCESS_COLOR = rgb(0.12, 0.72, 0.35)
+  const BG_LIGHT = rgb(0.97, 0.97, 0.99)
 
   let y = height - margin
 
   // ---- HEADER BACKGROUND ----
   page.drawRectangle({
     x: 0,
-    y: height - 120,
+    y: height - 110,
     width,
-    height: 120,
-    color: BRAND_COLOR,
+    height: 110,
+    color: BRAND_PRIMARY,
   })
 
-  // ---- LOGO AREA ----
-  page.drawText('R', {
+  // ---- BRAND LOGO BADGE ----
+  page.drawRoundedRectangle({
     x: margin,
-    y: height - 55,
-    size: 24,
-    font: boldFont,
+    y: height - 72,
+    width: 38,
+    height: 38,
+    borderWidth: 0,
     color: rgb(1, 1, 1),
   })
 
+  page.drawText('RM', {
+    x: margin + 8,
+    y: height - 60,
+    size: 16,
+    font: boldFont,
+    color: BRAND_PRIMARY,
+  })
+
   page.drawText('ReimburseMe', {
-    x: margin + 30,
-    y: height - 48,
+    x: margin + 48,
+    y: height - 52,
     size: 18,
     font: boldFont,
     color: rgb(1, 1, 1),
   })
 
   page.drawText('Personal Expense Recovery', {
-    x: margin + 30,
-    y: height - 64,
+    x: margin + 48,
+    y: height - 67,
     size: 9,
     font: regularFont,
-    color: rgb(0.85, 0.85, 1.0),
+    color: rgb(0.85, 0.87, 1.0),
   })
 
-  // ---- RECEIPT TITLE ----
+  // ---- RECEIPT TITLE & METADATA ----
   page.drawText('EXPENSE RECEIPT', {
-    x: width - margin - 130,
-    y: height - 45,
+    x: width - margin - 140,
+    y: height - 48,
     size: 14,
     font: boldFont,
     color: rgb(1, 1, 1),
   })
 
   page.drawText(`Generated: ${formatDate(generatedAt)}`, {
-    x: width - margin - 130,
-    y: height - 62,
-    size: 9,
+    x: width - margin - 140,
+    y: height - 64,
+    size: 8.5,
     font: regularFont,
-    color: rgb(0.85, 0.85, 1.0),
+    color: rgb(0.85, 0.87, 1.0),
   })
 
   if (generatedBy) {
     page.drawText(`By: ${generatedBy}`, {
-      x: width - margin - 130,
-      y: height - 76,
-      size: 9,
+      x: width - margin - 140,
+      y: height - 78,
+      size: 8.5,
       font: regularFont,
-      color: rgb(0.85, 0.85, 1.0),
+      color: rgb(0.85, 0.87, 1.0),
     })
   }
 
-  y = height - 140
+  y = height - 130
 
-  // ---- PERSON DETAILS SECTION ----
-  page.drawRectangle({ x: margin, y: y - 60, width: contentWidth, height: 70, color: BG_LIGHT })
-  page.drawRectangle({ x: margin, y: y - 60, width: 4, height: 70, color: BRAND_COLOR })
+  // ---- PREPARED FOR SECTION (Clean Alignment) ----
+  const preparedForHeight = 65
+  page.drawRectangle({
+    x: margin,
+    y: y - preparedForHeight,
+    width: contentWidth,
+    height: preparedForHeight,
+    color: BG_LIGHT,
+  })
+  page.drawRectangle({
+    x: margin,
+    y: y - preparedForHeight,
+    width: 4,
+    height: preparedForHeight,
+    color: BRAND_PRIMARY,
+  })
 
   page.drawText('PREPARED FOR', {
     x: margin + 14,
-    y: y - 12,
+    y: y - 18,
     size: 8,
     font: boldFont,
     color: MUTED,
@@ -145,59 +166,59 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
   page.drawText(person.name, {
     x: margin + 14,
-    y: y - 26,
-    size: 16,
+    y: y - 36,
+    size: 15,
     font: boldFont,
     color: DARK,
   })
 
-  const details = [
-    person.relationship,
-    person.phone,
-    person.email,
-  ].filter(Boolean).join('  ·  ')
-
-  if (details) {
-    page.drawText(details, {
+  const contactParts = [person.relationship, person.phone, person.email].filter(Boolean)
+  if (contactParts.length > 0) {
+    page.drawText(contactParts.join('  ·  '), {
       x: margin + 14,
-      y: y - 42,
+      y: y - 52,
       size: 9,
       font: regularFont,
       color: MUTED,
     })
   }
 
-  y -= 80
+  y -= preparedForHeight + 25
 
-  // ---- TOTAL OUTSTANDING ----
+  // ---- TOTAL OUTSTANDING SECTION (Clean Alignment) ----
   const totalOutstanding = debts.reduce((s, d) => s + d.outstandingAmount, 0)
 
-  page.drawText('Total Outstanding Amount', {
+  page.drawText('TOTAL OUTSTANDING AMOUNT', {
     x: margin,
-    y,
-    size: 10,
-    font: regularFont,
+    y: y,
+    size: 9,
+    font: boldFont,
     color: MUTED,
   })
 
-  y -= 18
+  y -= 22
 
   page.drawText(formatCurrency(totalOutstanding), {
     x: margin,
-    y,
-    size: 28,
+    y: y,
+    size: 26,
     font: boldFont,
-    color: BRAND_COLOR,
+    color: BRAND_PRIMARY,
   })
 
-  y -= 30
+  y -= 25
 
   // ---- DIVIDER ----
-  page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 0.5, color: BORDER })
+  page.drawLine({
+    start: { x: margin, y },
+    end: { x: width - margin, y },
+    thickness: 0.5,
+    color: BORDER,
+  })
   y -= 20
 
   // ---- DEBT RECORDS TABLE ----
-  page.drawText('EXPENSE DETAILS', {
+  page.drawText('ITEMIZED EXPENSES', {
     x: margin,
     y,
     size: 9,
@@ -205,70 +226,175 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     color: MUTED,
   })
 
-  y -= 14
+  y -= 16
 
-  // Table header
+  // Table Columns
   const cols = {
     date: margin,
-    desc: margin + 70,
-    category: margin + 270,
-    amount: width - margin - 70,
-    status: width - margin - 70,
+    desc: margin + 75,
+    category: margin + 355,
+    amount: width - margin - 75,
   }
+  const descWidth = cols.category - cols.desc - 10 // ~270pt for description column
 
-  page.drawRectangle({ x: margin, y: y - 14, width: contentWidth, height: 18, color: BRAND_COLOR })
-
-  ;[
-    { text: 'DATE', x: cols.date + 4 },
-    { text: 'DESCRIPTION', x: cols.desc + 4 },
-    { text: 'CATEGORY', x: cols.category + 4 },
-    { text: 'AMOUNT', x: cols.amount - 10 },
-  ].forEach(({ text, x }) => {
-    page.drawText(text, { x, y: y - 10, size: 8, font: boldFont, color: rgb(1, 1, 1) })
+  // Table Header Bar
+  page.drawRectangle({
+    x: margin,
+    y: y - 16,
+    width: contentWidth,
+    height: 20,
+    color: BRAND_PRIMARY,
   })
 
-  y -= 18
+  ;[
+    { text: 'DATE', x: cols.date + 6 },
+    { text: 'DESCRIPTION & NARRATION', x: cols.desc + 6 },
+    { text: 'CATEGORY', x: cols.category + 6 },
+    { text: 'AMOUNT', x: cols.amount + 10 },
+  ].forEach(({ text, x }) => {
+    page.drawText(text, {
+      x,
+      y: y - 12,
+      size: 8,
+      font: boldFont,
+      color: rgb(1, 1, 1),
+    })
+  })
 
-  // Rows
+  y -= 22
+
+  // Table Rows (with multi-line text wrapping)
   let rowIndex = 0
   for (const debt of debts) {
-    if (y < 150) {
-      // Add new page if needed
-      break // Simplified — in production add new page
-    }
+    if (y < 120) break
 
-    const isEven = rowIndex % 2 === 0
-    if (isEven) {
-      page.drawRectangle({ x: margin, y: y - 14, width: contentWidth, height: 18, color: BG_LIGHT })
+    // Linked bank narration if available and distinct from title
+    const rawNarration = debt.debtTransactions?.[0]?.transaction?.rawNarration
+    const displayNarration = rawNarration && rawNarration !== debt.title ? rawNarration : null
+
+    // Wrap label lines and narration lines
+    const titleLines = wrapText(debt.title, 42)
+    const narrationLines = displayNarration ? wrapText(displayNarration, 54) : []
+
+    const labelHeight = titleLines.length * 11
+    const narrationHeight = narrationLines.length * 9
+    const rowHeight = Math.max(24, labelHeight + (displayNarration ? narrationHeight + 4 : 0) + 10)
+
+    // Row zebra striping
+    if (rowIndex % 2 === 0) {
+      page.drawRectangle({
+        x: margin,
+        y: y - rowHeight + 4,
+        width: contentWidth,
+        height: rowHeight,
+        color: BG_LIGHT,
+      })
     }
 
     const dateStr = formatDate(new Date(debt.createdAt))
-    const descStr = truncate(debt.title, 30)
-    const catStr = debt.category?.name || 'Others'
+    const catStr = debt.category?.name || 'General'
     const amtStr = formatCurrency(debt.outstandingAmount)
 
-    page.drawText(dateStr, { x: cols.date + 4, y: y - 10, size: 8, font: regularFont, color: DARK })
-    page.drawText(descStr, { x: cols.desc + 4, y: y - 10, size: 8, font: regularFont, color: DARK })
-    page.drawText(catStr, { x: cols.category + 4, y: y - 10, size: 8, font: regularFont, color: MUTED })
-    page.drawText(amtStr, { x: cols.amount - 10, y: y - 10, size: 8, font: boldFont, color: DARK })
+    // Date
+    page.drawText(dateStr, {
+      x: cols.date + 6,
+      y: y - 10,
+      size: 8,
+      font: regularFont,
+      color: DARK,
+    })
 
-    y -= 18
+    // Category
+    page.drawText(catStr, {
+      x: cols.category + 6,
+      y: y - 10,
+      size: 8,
+      font: regularFont,
+      color: MUTED,
+    })
+
+    // Amount
+    page.drawText(amtStr, {
+      x: cols.amount + 10,
+      y: y - 10,
+      size: 8.5,
+      font: boldFont,
+      color: DARK,
+    })
+
+    // Description & Narration (Multi-line)
+    let descY = y - 10
+    for (const line of titleLines) {
+      page.drawText(line, {
+        x: cols.desc + 6,
+        y: descY,
+        size: 8.5,
+        font: boldFont,
+        color: DARK,
+      })
+      descY -= 11
+    }
+
+    if (displayNarration) {
+      descY -= 2
+      for (const line of narrationLines) {
+        page.drawText(line, {
+          x: cols.desc + 6,
+          y: descY,
+          size: 7.5,
+          font: regularFont,
+          color: MUTED,
+        })
+        descY -= 9
+      }
+    }
+
+    y -= rowHeight
     rowIndex++
   }
 
-  // ---- TOTAL ROW ----
-  page.drawLine({ start: { x: margin, y: y + 4 }, end: { x: width - margin, y: y + 4 }, thickness: 0.5, color: BORDER })
+  // ---- TOTAL SUMMARY ROW ----
+  page.drawLine({
+    start: { x: margin, y: y + 4 },
+    end: { x: width - margin, y: y + 4 },
+    thickness: 0.5,
+    color: BORDER,
+  })
   y -= 6
 
-  page.drawRectangle({ x: margin, y: y - 16, width: contentWidth, height: 20, color: rgb(0.93, 0.93, 1.0) })
-  page.drawText('TOTAL OUTSTANDING', { x: margin + 4, y: y - 11, size: 9, font: boldFont, color: BRAND_COLOR })
-  page.drawText(formatCurrency(totalOutstanding), { x: cols.amount - 10, y: y - 11, size: 11, font: boldFont, color: BRAND_COLOR })
+  page.drawRectangle({
+    x: margin,
+    y: y - 18,
+    width: contentWidth,
+    height: 22,
+    color: rgb(0.92, 0.93, 0.98),
+  })
+  page.drawText('TOTAL OUTSTANDING', {
+    x: margin + 6,
+    y: y - 13,
+    size: 9,
+    font: boldFont,
+    color: BRAND_PRIMARY,
+  })
+  page.drawText(formatCurrency(totalOutstanding), {
+    x: cols.amount + 10,
+    y: y - 13,
+    size: 11,
+    font: boldFont,
+    color: BRAND_PRIMARY,
+  })
 
-  y -= 35
+  y -= 40
 
-  // ---- UPI QR CODE ----
-  if (upiId && y > 200) {
-    page.drawText('PAY NOW', { x: margin, y, size: 9, font: boldFont, color: MUTED })
+  // ---- UPI QR CODE SECTION ----
+  if (upiId && y > 140) {
+    page.drawText('PAYMENT QR CODE', {
+      x: margin,
+      y,
+      size: 9,
+      font: boldFont,
+      color: MUTED,
+    })
     y -= 14
 
     try {
@@ -279,32 +405,58 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
         note: `Payment to ${generatedBy} via ReimburseMe`,
       })
 
-      // Extract base64 from data URL
       const base64 = qrDataUrl.split(',')[1]
       const qrImageBytes = Buffer.from(base64, 'base64')
       const qrImage = await pdfDoc.embedPng(qrImageBytes)
 
-      const qrSize = 90
-      page.drawImage(qrImage, { x: margin, y: y - qrSize, width: qrSize, height: qrSize })
+      const qrSize = 85
+      page.drawImage(qrImage, {
+        x: margin,
+        y: y - qrSize,
+        width: qrSize,
+        height: qrSize,
+      })
 
-      page.drawText(`UPI: ${upiId}`, { x: margin + qrSize + 10, y: y - 25, size: 9, font: boldFont, color: DARK })
-      page.drawText('Scan to pay instantly', { x: margin + qrSize + 10, y: y - 38, size: 8, font: regularFont, color: MUTED })
-      page.drawText(`Rs. ${totalOutstanding.toLocaleString('en-IN')}`, { x: margin + qrSize + 10, y: y - 52, size: 14, font: boldFont, color: SUCCESS_COLOR })
+      page.drawText(`UPI ID: ${upiId}`, {
+        x: margin + qrSize + 14,
+        y: y - 24,
+        size: 9,
+        font: boldFont,
+        color: DARK,
+      })
+      page.drawText('Scan with Google Pay, PhonePe, Paytm or any UPI App', {
+        x: margin + qrSize + 14,
+        y: y - 38,
+        size: 8,
+        font: regularFont,
+        color: MUTED,
+      })
+      page.drawText(`Rs. ${totalOutstanding.toLocaleString('en-IN')}`, {
+        x: margin + qrSize + 14,
+        y: y - 54,
+        size: 14,
+        font: boldFont,
+        color: SUCCESS_COLOR,
+      })
 
       y -= qrSize + 20
-    } catch (e) {
-      // QR generation failed — skip silently
+    } catch {
+      // QR fallback silently
     }
   }
 
   // ---- FOOTER ----
-  y = margin + 20
-
-  page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 0.5, color: BORDER })
+  const footerY = margin + 15
+  page.drawLine({
+    start: { x: margin, y: footerY },
+    end: { x: width - margin, y: footerY },
+    thickness: 0.5,
+    color: BORDER,
+  })
 
   page.drawText('Generated by ReimburseMe · Personal Expense Recovery Platform', {
     x: margin,
-    y: y - 14,
+    y: footerY - 14,
     size: 8,
     font: regularFont,
     color: MUTED,
@@ -312,7 +464,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
   page.drawText(`Document generated on ${formatDate(generatedAt)}`, {
     x: width - margin - 170,
-    y: y - 14,
+    y: footerY - 14,
     size: 8,
     font: regularFont,
     color: MUTED,
@@ -324,7 +476,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
 // ---- Helpers ----
 function formatDate(date: Date): string {
-  const d = date
+  const d = new Date(date)
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   return `${d.getDate().toString().padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`
 }
@@ -333,6 +485,20 @@ function formatCurrency(amount: number): string {
   return `Rs. ${Math.round(amount).toLocaleString('en-IN')}`
 }
 
-function truncate(str: string, max: number): string {
-  return str.length > max ? str.slice(0, max) + '...' : str
+function wrapText(str: string, maxCharsPerLine: number): string[] {
+  if (!str) return []
+  const words = str.split(' ')
+  const lines: string[] = []
+  let currentLine = ''
+
+  for (const word of words) {
+    if ((currentLine + ' ' + word).trim().length <= maxCharsPerLine) {
+      currentLine = (currentLine + ' ' + word).trim()
+    } else {
+      if (currentLine) lines.push(currentLine)
+      currentLine = word
+    }
+  }
+  if (currentLine) lines.push(currentLine)
+  return lines.length > 0 ? lines : [str]
 }

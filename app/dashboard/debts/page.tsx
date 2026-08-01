@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { CreditCard, Plus, Users, TrendingDown, Clock, CheckCircle2, Filter } from 'lucide-react'
+import { CreditCard, Plus, Users, TrendingDown, Clock, CheckCircle2, Filter, Pencil } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatCurrency, formatDate, getDebtStatusColor, cn } from '@/lib/utils'
+import { EditLabelModal } from '@/components/transactions/edit-label-modal'
 import { toast } from 'sonner'
 import Link from 'next/link'
 
@@ -33,6 +34,8 @@ const STATUS_OPTIONS = ['all', 'PENDING', 'PARTIAL', 'SETTLED', 'OVERDUE']
 export default function DebtsPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [personFilter, setPersonFilter] = useState('all')
+  const [editLabelOpen, setEditLabelOpen] = useState(false)
+  const [editingDebt, setEditingDebt] = useState<{ id: string; title: string } | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['debts', statusFilter, personFilter],
@@ -127,7 +130,12 @@ export default function DebtsPage() {
                 Pending ({pendingDebts.length})
               </h2>
               {pendingDebts.map((debt, i) => (
-                <DebtCard key={debt.id} debt={debt} index={i} />
+                <DebtCard
+                  key={debt.id}
+                  debt={debt}
+                  index={i}
+                  onEditLabel={(d) => { setEditingDebt({ id: d.id, title: d.title }); setEditLabelOpen(true) }}
+                />
               ))}
             </>
           )}
@@ -139,17 +147,31 @@ export default function DebtsPage() {
                 Settled ({settledDebts.length})
               </h2>
               {settledDebts.map((debt, i) => (
-                <DebtCard key={debt.id} debt={debt} index={i} />
+                <DebtCard
+                  key={debt.id}
+                  debt={debt}
+                  index={i}
+                  onEditLabel={(d) => { setEditingDebt({ id: d.id, title: d.title }); setEditLabelOpen(true) }}
+                />
               ))}
             </>
           )}
         </div>
       )}
+
+      {/* Edit Label Modal */}
+      <EditLabelModal
+        open={editLabelOpen}
+        onOpenChange={setEditLabelOpen}
+        targetType="debt"
+        targetId={editingDebt?.id || null}
+        initialLabel={editingDebt?.title}
+      />
     </div>
   )
 }
 
-function DebtCard({ debt, index }: { debt: Debt; index: number }) {
+function DebtCard({ debt, index, onEditLabel }: { debt: Debt; index: number; onEditLabel: (debt: Debt) => void }) {
   const statusColor = getDebtStatusColor(debt.status)
   const progressPct = debt.totalAmount > 0 ? (debt.recoveredAmount / debt.totalAmount) * 100 : 0
 
@@ -175,7 +197,16 @@ function DebtCard({ debt, index }: { debt: Debt; index: number }) {
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-semibold text-foreground text-sm">{debt.title}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-semibold text-foreground text-sm">{debt.title}</p>
+                    <button
+                      onClick={() => onEditLabel(debt)}
+                      className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                      title="Edit Debt Label"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     <Link href={`/dashboard/people/${debt.person.id}`} className="hover:text-foreground transition-colors">
                       {debt.person.name}

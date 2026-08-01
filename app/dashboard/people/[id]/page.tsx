@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft, FileText, Share2, Plus, CheckCircle2, Clock, AlertCircle,
-  Phone, Mail, Wallet, TrendingDown, TrendingUp,
+  Phone, Mail, Wallet, TrendingDown, TrendingUp, Pencil,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { formatCurrency, formatDate, getInitials, cn } from '@/lib/utils'
+import { EditLabelModal } from '@/components/transactions/edit-label-modal'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -39,8 +40,11 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default function PersonDetailPage() {
   const params = useParams()
-  const id = params.id as string
+  const id = params?.id as string
   const queryClient = useQueryClient()
+  const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null)
+  const [editLabelOpen, setEditLabelOpen] = useState(false)
+  const [editingDebt, setEditingDebt] = useState<{ id: string; title: string } | null>(null)
   const [settlingDebtId, setSettlingDebtId] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -227,6 +231,13 @@ export default function PersonDetailPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-medium text-foreground text-sm">{debt.title}</h3>
+                        <button
+                          onClick={() => { setEditingDebt({ id: debt.id, title: debt.title }); setEditLabelOpen(true) }}
+                          className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                          title="Edit Label"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
                         <Badge
                           variant="outline"
                           className={cn('text-[10px] px-1.5 py-0', STATUS_STYLES[debt.status])}
@@ -359,6 +370,15 @@ export default function PersonDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Edit Label Modal */}
+      <EditLabelModal
+        open={editLabelOpen}
+        onOpenChange={setEditLabelOpen}
+        targetType="debt"
+        targetId={editingDebt?.id || null}
+        initialLabel={editingDebt?.title}
+      />
     </div>
   )
 }
