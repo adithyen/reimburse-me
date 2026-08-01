@@ -15,16 +15,16 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: 'ReimburseMe — Personal Expense Recovery',
+    default: 'ReimburseMe',
     template: '%s | ReimburseMe',
   },
   description:
-    'Track money spent on behalf of others, monitor reimbursements, and project your true financial position after pending recoveries.',
+    'ReimburseMe is a personal expense recovery platform. Track money spent on behalf of others, monitor reimbursements, and project your true financial position after pending recoveries.',
   keywords: ['expense tracker', 'reimbursement', 'personal finance', 'debt tracker', 'UPI', 'India'],
   authors: [{ name: 'ReimburseMe' }],
   openGraph: {
-    title: 'ReimburseMe — Personal Expense Recovery',
-    description: 'Track recoverable expenses, assign to people, and get paid back faster.',
+    title: 'ReimburseMe',
+    description: 'ReimburseMe is a personal expense recovery platform. Track recoverable expenses, assign to people, and get paid back faster.',
     type: 'website',
   },
   icons: {

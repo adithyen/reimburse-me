@@ -7,12 +7,12 @@ import { GoogleIcon } from '@/components/ui/google-icon'
 import { ArrowRight, FileText, QrCode, ShieldCheck, Users2, Wallet } from 'lucide-react'
 
 export const metadata = {
-  title: 'ReimburseMe — Personal Expense Recovery Platform',
-  description: 'Track money spent on behalf of others, manage reimbursements, import bank statements, and project your true balance after pending recoveries.',
+  title: 'ReimburseMe',
+  description: 'ReimburseMe is a personal expense recovery platform. Track money spent on behalf of others, manage reimbursements, import bank statements, and project your true balance after pending recoveries.',
   applicationName: 'ReimburseMe',
   openGraph: {
-    title: 'ReimburseMe — Personal Expense Recovery',
-    description: 'Track recoverable expenses, assign to people, and get paid back faster.',
+    title: 'ReimburseMe',
+    description: 'ReimburseMe is a personal expense recovery platform. Track recoverable expenses, assign to people, and get paid back faster.',
     siteName: 'ReimburseMe',
     type: 'website',
   },
@@ -48,8 +48,10 @@ export default async function HomePage() {
       {/* Navigation Header */}
       <header className="border-b border-white/10 bg-[#0B0F19]/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3" aria-label="ReimburseMe">
             <Logo size={38} showText={true} />
+            {/* Hidden text for crawlers to read exact app name as a single string */}
+            <span className="sr-only">ReimburseMe</span>
           </Link>
 
           <div className="flex items-center gap-4">
@@ -77,8 +79,11 @@ export default async function HomePage() {
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight">
-            Track money spent for others with <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-400">ReimburseMe</span>
+            ReimburseMe
           </h1>
+          <p className="text-xl sm:text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-400">
+            Personal Expense Recovery Platform
+          </p>
 
           <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-2xl mx-auto">
             ReimburseMe helps you manage personal expense recoveries. Easily log money spent on behalf of friends, family, and group trips, import bank statements, and know your true projected financial balance.
