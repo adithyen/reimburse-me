@@ -128,8 +128,21 @@ export default function PersonDetailPage() {
     </div>
   )
 
-  const pendingDebts = data.debtRecords?.filter((d: { status: string }) => ['PENDING', 'PARTIAL'].includes(d.status)) || []
-  const settledDebts = data.debtRecords?.filter((d: { status: string }) => d.status === 'SETTLED') || []
+  const pendingDebts = (data.debtRecords?.filter((d: { status: string }) => ['PENDING', 'PARTIAL'].includes(d.status)) || [])
+    .slice()
+    .sort((a: any, b: any) => {
+      const dateA = new Date(a.debtTransactions?.[0]?.transaction?.date || a.createdAt).getTime()
+      const dateB = new Date(b.debtTransactions?.[0]?.transaction?.date || b.createdAt).getTime()
+      return dateA - dateB
+    })
+
+  const settledDebts = (data.debtRecords?.filter((d: { status: string }) => d.status === 'SETTLED') || [])
+    .slice()
+    .sort((a: any, b: any) => {
+      const dateA = new Date(a.debtTransactions?.[0]?.transaction?.date || a.createdAt).getTime()
+      const dateB = new Date(b.debtTransactions?.[0]?.transaction?.date || b.createdAt).getTime()
+      return dateA - dateB
+    })
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -294,7 +307,10 @@ export default function PersonDetailPage() {
                           )}
                         </div>
 
-                        <p className="text-[11px] text-muted-foreground mt-1">{formatDate(new Date(debt.createdAt))}</p>
+                        {(() => {
+                          const txnDate = debt.debtTransactions?.[0]?.transaction?.date || debt.createdAt
+                          return <p className="text-[11px] text-muted-foreground mt-1">{formatDate(new Date(txnDate))}</p>
+                        })()}
                         {debt.notes && <p className="text-xs text-muted-foreground mt-1 italic">{debt.notes}</p>}
                       </div>
                       <div className="text-right flex-shrink-0">

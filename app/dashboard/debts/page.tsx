@@ -59,8 +59,23 @@ export default function DebtsPage() {
   const debts: Debt[] = data?.data || []
   const summary = data?.summary || {}
 
-  const pendingDebts = debts.filter((d) => ['PENDING', 'PARTIAL', 'OVERDUE'].includes(d.status))
-  const settledDebts = debts.filter((d) => d.status === 'SETTLED')
+  const pendingDebts = debts
+    .filter((d) => ['PENDING', 'PARTIAL', 'OVERDUE'].includes(d.status))
+    .slice()
+    .sort((a, b) => {
+      const dateA = new Date((a as any).debtTransactions?.[0]?.transaction?.date || a.createdAt).getTime()
+      const dateB = new Date((b as any).debtTransactions?.[0]?.transaction?.date || b.createdAt).getTime()
+      return dateA - dateB
+    })
+
+  const settledDebts = debts
+    .filter((d) => d.status === 'SETTLED')
+    .slice()
+    .sort((a, b) => {
+      const dateA = new Date((a as any).debtTransactions?.[0]?.transaction?.date || a.createdAt).getTime()
+      const dateB = new Date((b as any).debtTransactions?.[0]?.transaction?.date || b.createdAt).getTime()
+      return dateA - dateB
+    })
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -239,7 +254,7 @@ function DebtCard({ debt, index, onEditLabel }: { debt: Debt; index: number; onE
                       {debt.person.name}
                     </Link>
                     {debt.person.relationship && ` · ${debt.person.relationship}`}
-                    {' · '}{formatDate(new Date(debt.createdAt))}
+                    {' · '}{formatDate(new Date((debt as any).debtTransactions?.[0]?.transaction?.date || debt.createdAt))}
                   </p>
                 </div>
                 <div className="text-right flex-shrink-0">

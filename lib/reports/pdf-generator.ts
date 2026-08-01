@@ -2,10 +2,12 @@
  * PDF Receipt Generator using pdf-lib
  * Generates a professional, branded PDF receipt for debt collection.
  * Features:
- * - Brand logo vector icon (matching website logo.tsx component)
+ * - Brand logo vector icon with inner document lines (matching website logo.tsx / icon.svg)
  * - Person details (Prepared For) with clean alignment
  * - Total outstanding summary
  * - Itemized expenses table with 4 columns: DATE | TRANSACTION DESCRIPTION | LABEL | AMOUNT
+ * - Expenses sorted by transaction date ASCENDING (oldest date first)
+ * - Display original transaction date (date when expense occurred, not assignment date)
  * - Category shown under description
  * - Em-dash / Hyphen '-' shown when label is not explicitly custom-set by user
  * - Pure ASCII text sanitization to guarantee 100% WinAnsi font compatibility without crash
@@ -50,6 +52,13 @@ interface ReportInput {
 export async function generatePersonReceipt(input: ReportInput): Promise<Buffer> {
   const { person, debts, generatedBy, upiId, generatedAt } = input
 
+  // Sort debts by transaction date ASCENDING (oldest first)
+  const sortedDebts = [...debts].sort((a, b) => {
+    const dateA = new Date(a.debtTransactions?.[0]?.transaction?.date || a.createdAt).getTime()
+    const dateB = new Date(b.debtTransactions?.[0]?.transaction?.date || b.createdAt).getTime()
+    return dateA - dateB
+  })
+
   const pdfDoc = await PDFDocument.create()
   const page = pdfDoc.addPage([595, 842]) // A4
   const { width, height } = page.getSize()
@@ -64,6 +73,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
   const BRAND_PRIMARY = rgb(0.38, 0.40, 0.95) // Indigo
   const CYAN_COLOR = rgb(0.0, 0.78, 0.86)      // #00C8DC brand cyan
   const LIME_COLOR = rgb(0.54, 0.88, 0.0)      // #8AE000 brand lime green
+  const DOC_LINE_COLOR = rgb(0.34, 0.71, 0.78)  // #58B5C8 inner document line color
   const DARK = rgb(0.08, 0.09, 0.12)
   const MUTED = rgb(0.45, 0.47, 0.55)
   const BORDER = rgb(0.88, 0.89, 0.93)
@@ -81,7 +91,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     color: BRAND_PRIMARY,
   })
 
-  // ---- BRAND LOGO BADGE (Matching Website Logo Component) ----
+  // ---- BRAND LOGO BADGE (Matching icon.svg / logo.tsx) ----
   const logoX = margin
   const logoY = height - 74
   const logoSize = 38
@@ -101,7 +111,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
   const ox = logoX
   const oy = logoY + logoSize // invert Y for PDF coordinates
 
-  // Cyan Arc
+  // Cyan Refresh Arc
   page.drawSvgPath('M 215 105 C 130 135 100 240 140 325 C 180 410 280 435 365 390', {
     x: ox,
     y: oy,
@@ -145,6 +155,12 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     borderColor: CYAN_COLOR,
     borderWidth: 16 * s,
   })
+
+  // Inner Document Header Bar & Lines
+  page.drawRectangle({ x: ox + 215 * s, y: oy - (155 + 14) * s, width: 45 * s, height: 14 * s, color: CYAN_COLOR })
+  page.drawRectangle({ x: ox + 215 * s, y: oy - (195 + 14) * s, width: 90 * s, height: 14 * s, color: DOC_LINE_COLOR })
+  page.drawRectangle({ x: ox + 215 * s, y: oy - (228 + 14) * s, width: 90 * s, height: 14 * s, color: DOC_LINE_COLOR })
+  page.drawRectangle({ x: ox + 215 * s, y: oy - (261 + 14) * s, width: 65 * s, height: 14 * s, color: DOC_LINE_COLOR })
 
   // ---- BRAND NAME & SUBTITLE ----
   page.drawText(cleanText('ReimburseMe'), {
@@ -239,7 +255,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
   y -= preparedForHeight + 25
 
   // ---- TOTAL OUTSTANDING SECTION ----
-  const totalOutstanding = debts.reduce((s, d) => s + d.outstandingAmount, 0)
+  const totalOutstanding = sortedDebts.reduce((s, d) => s + d.outstandingAmount, 0)
 
   page.drawText(cleanText('TOTAL OUTSTANDING AMOUNT'), {
     x: margin,
@@ -289,7 +305,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     amount: width - margin - 75, // 475 (width ~75pt)
   }
 
-  // Table Header Bar (Header changed to 'LABEL')
+  // Table Header Bar
   page.drawRectangle({
     x: margin,
     y: y - 16,
@@ -315,13 +331,16 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
   y -= 22
 
-  // Table Rows
+  // Table Rows (Sorted by transaction date ascending - oldest first)
   let rowIndex = 0
-  for (const debt of debts) {
+  for (const debt of sortedDebts) {
     if (y < 120) break
 
     const rawNarration = debt.debtTransactions?.[0]?.transaction?.rawNarration
     const descriptionText = cleanText(rawNarration || debt.title || 'Transaction')
+
+    // Display original transaction date (date when expense actually occurred)
+    const txnDate = debt.debtTransactions?.[0]?.transaction?.date || debt.createdAt
 
     // Only display label if user explicitly set a custom label (not auto-copied bank narration)
     const hasCustomLabel = isUserCustomLabel(debt.title, rawNarration)
@@ -347,7 +366,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
       })
     }
 
-    const dateStr = formatDate(new Date(debt.createdAt))
+    const dateStr = formatDate(new Date(txnDate))
     const amtStr = formatCurrency(debt.outstandingAmount)
 
     // Date
