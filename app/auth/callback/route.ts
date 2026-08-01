@@ -12,8 +12,12 @@ export async function GET(request: Request) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error && data.user) {
-      // Ensure user exists in DB and accounts are linked by email
-      await getOrCreateAuthUser()
+      try {
+        // Ensure user exists in DB and accounts are linked by email
+        await getOrCreateAuthUser(data.user)
+      } catch (e) {
+        console.error('Error syncing user during auth callback:', e)
+      }
       return NextResponse.redirect(`${origin}${next}`)
     }
   }
