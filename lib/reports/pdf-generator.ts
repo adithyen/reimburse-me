@@ -2,12 +2,12 @@
  * PDF Receipt Generator using pdf-lib
  * Generates a professional, branded PDF receipt for debt collection.
  * Features:
- * - Header with brand logo and metadata
+ * - Brand logo vector icon (matching website logo.tsx component)
  * - Person details (Prepared For) with clean alignment
  * - Total outstanding summary
- * - Itemized expenses table with 4 columns: DATE | TRANSACTION DESCRIPTION | CUSTOM LABEL | AMOUNT
+ * - Itemized expenses table with 4 columns: DATE | TRANSACTION DESCRIPTION | LABEL | AMOUNT
  * - Category shown under description
- * - ASCII Hyphen '-' shown for unassigned custom labels
+ * - Em-dash / Hyphen '-' shown when label is not explicitly custom-set by user
  * - Pure ASCII text sanitization to guarantee 100% WinAnsi font compatibility without crash
  * - UPI QR code payment card
  */
@@ -62,6 +62,8 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
   // Palette
   const BRAND_PRIMARY = rgb(0.38, 0.40, 0.95) // Indigo
+  const CYAN_COLOR = rgb(0.0, 0.78, 0.86)      // #00C8DC brand cyan
+  const LIME_COLOR = rgb(0.54, 0.88, 0.0)      // #8AE000 brand lime green
   const DARK = rgb(0.08, 0.09, 0.12)
   const MUTED = rgb(0.45, 0.47, 0.55)
   const BORDER = rgb(0.88, 0.89, 0.93)
@@ -79,24 +81,72 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     color: BRAND_PRIMARY,
   })
 
-  // ---- BRAND LOGO BADGE ----
+  // ---- BRAND LOGO BADGE (Matching Website Logo Component) ----
+  const logoX = margin
+  const logoY = height - 74
+  const logoSize = 38
+
+  // White Card Background
   page.drawRectangle({
-    x: margin,
-    y: height - 72,
-    width: 38,
-    height: 38,
+    x: logoX,
+    y: logoY,
+    width: logoSize,
+    height: logoSize,
     borderWidth: 0,
     color: rgb(1, 1, 1),
   })
 
-  page.drawText(cleanText('RM'), {
-    x: margin + 8,
-    y: height - 60,
-    size: 16,
-    font: boldFont,
-    color: BRAND_PRIMARY,
+  // Vector Logo Elements (Scaled from 512x512 viewBox)
+  const s = logoSize / 512
+  const ox = logoX
+  const oy = logoY + logoSize // invert Y for PDF coordinates
+
+  // Cyan Arc
+  page.drawSvgPath('M 215 105 C 130 135 100 240 140 325 C 180 410 280 435 365 390', {
+    x: ox,
+    y: oy,
+    scale: s,
+    borderColor: CYAN_COLOR,
+    borderWidth: 24 * s,
   })
 
+  // Lime Green Arc
+  page.drawSvgPath('M 365 390 C 420 350 445 265 410 195', {
+    x: ox,
+    y: oy,
+    scale: s,
+    borderColor: LIME_COLOR,
+    borderWidth: 24 * s,
+  })
+
+  // Arrow Head
+  page.drawSvgPath('M 370 230 L 420 180 L 440 240', {
+    x: ox,
+    y: oy,
+    scale: s,
+    borderColor: LIME_COLOR,
+    borderWidth: 24 * s,
+  })
+
+  // Document Container
+  page.drawSvgPath('M 190 120 H 320 C 331 120 340 129 340 140 V 290 L 300 330 H 190 C 179 330 170 321 170 310 V 140 C 170 129 179 120 190 120 Z', {
+    x: ox,
+    y: oy,
+    scale: s,
+    borderColor: CYAN_COLOR,
+    borderWidth: 16 * s,
+  })
+
+  // Folded Corner
+  page.drawSvgPath('M 300 290 V 330 H 340', {
+    x: ox,
+    y: oy,
+    scale: s,
+    borderColor: CYAN_COLOR,
+    borderWidth: 16 * s,
+  })
+
+  // ---- BRAND NAME & SUBTITLE ----
   page.drawText(cleanText('ReimburseMe'), {
     x: margin + 48,
     y: height - 52,
@@ -142,7 +192,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
   y = height - 130
 
-  // ---- PREPARED FOR SECTION (Clean Alignment) ----
+  // ---- PREPARED FOR SECTION ----
   const preparedForHeight = 65
   page.drawRectangle({
     x: margin,
@@ -188,7 +238,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
   y -= preparedForHeight + 25
 
-  // ---- TOTAL OUTSTANDING SECTION (Clean Alignment) ----
+  // ---- TOTAL OUTSTANDING SECTION ----
   const totalOutstanding = debts.reduce((s, d) => s + d.outstandingAmount, 0)
 
   page.drawText(cleanText('TOTAL OUTSTANDING AMOUNT'), {
@@ -239,7 +289,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     amount: width - margin - 75, // 475 (width ~75pt)
   }
 
-  // Table Header Bar
+  // Table Header Bar (Header changed to 'LABEL')
   page.drawRectangle({
     x: margin,
     y: y - 16,
@@ -251,7 +301,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
   ;[
     { text: 'DATE', x: cols.date + 6 },
     { text: 'TRANSACTION DESCRIPTION', x: cols.desc + 6 },
-    { text: 'CUSTOM LABEL', x: cols.label + 6 },
+    { text: 'LABEL', x: cols.label + 6 },
     { text: 'AMOUNT', x: cols.amount + 6 },
   ].forEach(({ text, x }) => {
     page.drawText(cleanText(text), {
@@ -272,7 +322,10 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
     const rawNarration = debt.debtTransactions?.[0]?.transaction?.rawNarration
     const descriptionText = cleanText(rawNarration || debt.title || 'Transaction')
-    const labelText = (debt.title && debt.title !== rawNarration) ? cleanText(debt.title) : '-'
+
+    // Only display label if user explicitly set a custom label (not auto-copied bank narration)
+    const hasCustomLabel = isUserCustomLabel(debt.title, rawNarration)
+    const labelText = hasCustomLabel ? cleanText(debt.title) : '-'
     const catName = debt.category?.name ? cleanText(debt.category.name) : null
 
     // Wrap lines
@@ -338,7 +391,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
       })
     }
 
-    // Custom Label Column (Turf or '-')
+    // Label Column (Turf or '-' if unassigned)
     let labelY = y - 10
     for (const line of labelLines) {
       page.drawText(cleanText(line), {
@@ -477,6 +530,17 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 }
 
 // ---- Helpers ----
+function isUserCustomLabel(title: string | null | undefined, rawNarration: string | null | undefined): boolean {
+  if (!title) return false
+  if (!rawNarration) return true
+  const cleanTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const cleanNarration = rawNarration.toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (!cleanTitle) return false
+  if (cleanTitle === cleanNarration) return false
+  if (cleanNarration.includes(cleanTitle) || cleanTitle.includes(cleanNarration)) return false
+  return true
+}
+
 function cleanText(text: string | null | undefined): string {
   if (!text) return ''
   return text
