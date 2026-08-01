@@ -25,24 +25,39 @@ export async function getOrCreateAuthUser(authUserParam?: any) {
   const googleName = metadata.name || metadata.full_name || authUser.email?.split('@')[0] || 'User'
 
   try {
-    // Merge any duplicate users sharing the same email
-    if (authUser.email) {
-      await mergeDuplicateUsersByEmail(authUser, googleAvatar, googleName)
-    }
-
-    // Now find the unified user record
-    let user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { authId: authUser.id },
-          ...(authUser.email ? [{ email: authUser.email }] : []),
-        ],
-      },
+    // 1. Try finding user by authId (Supabase auth.users.id)
+    let user = await prisma.user.findUnique({
+      where: { authId: authUser.id },
       include: { settings: true },
     })
 
+    // 2. If not found by authId, try finding by email
     if (!user && authUser.email) {
-      // Create new user if still none exists
+      user = await prisma.user.findFirst({
+        where: { email: authUser.email },
+        include: { settings: true },
+      })
+
+      if (user) {
+        // Link existing user record to new Google OAuth authId
+        try {
+          user = await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              authId: authUser.id,
+              ...(googleAvatar ? { avatarUrl: googleAvatar } : {}),
+              ...(googleName && (!user.name || user.name === 'User') ? { name: googleName } : {}),
+            },
+            include: { settings: true },
+          })
+        } catch (e) {
+          console.error('Failed to link authId:', e)
+        }
+      }
+    }
+
+    // 3. If still not found, create new user record
+    if (!user && authUser.email) {
       try {
         user = await prisma.user.create({
           data: {
@@ -76,32 +91,49 @@ export async function getOrCreateAuthUser(authUserParam?: any) {
           skipDuplicates: true,
         })
       } catch (e) {
-        console.error('Error creating user record:', e)
+        console.error('Error creating user:', e)
         user = await prisma.user.findFirst({
           where: { OR: [{ authId: authUser.id }, { email: authUser.email }] },
           include: { settings: true },
         })
       }
     } else if (user) {
-      // Update authId, avatar, or name if needed
-      const needsAuthIdUpdate = user.authId !== authUser.id
+      // 4. Update avatar or name if available
       const needsAvatarUpdate = googleAvatar && user.avatarUrl !== googleAvatar
       const needsNameUpdate = googleName && (!user.name || user.name === 'User')
 
-      if (needsAuthIdUpdate || needsAvatarUpdate || needsNameUpdate) {
+      if (needsAvatarUpdate || needsNameUpdate) {
         try {
           user = await prisma.user.update({
             where: { id: user.id },
             data: {
-              ...(needsAuthIdUpdate ? { authId: authUser.id } : {}),
               ...(needsAvatarUpdate ? { avatarUrl: googleAvatar } : {}),
               ...(needsNameUpdate ? { name: googleName } : {}),
             },
             include: { settings: true },
           })
         } catch (e) {
-          console.error('Error updating user metadata:', e)
+          console.error('Error updating user avatar/name:', e)
         }
+      }
+    }
+
+    // 5. Ensure user settings exist
+    if (user && !user.settings) {
+      try {
+        const settings = await prisma.userSettings.create({
+          data: {
+            userId: user.id,
+            theme: 'dark',
+            currency: 'INR',
+            timezone: 'Asia/Kolkata',
+            targetBalance: 0,
+            onboardingDone: false,
+          },
+        })
+        user = { ...user, settings }
+      } catch (e) {
+        console.error('Failed to create settings:', e)
       }
     }
 
@@ -109,76 +141,5 @@ export async function getOrCreateAuthUser(authUserParam?: any) {
   } catch (err) {
     console.error('getOrCreateAuthUser root exception:', err)
     return null
-  }
-}
-
-async function mergeDuplicateUsersByEmail(authUser: any, googleAvatar: string | null, googleName: string) {
-  try {
-    const matchingUsers = await prisma.user.findMany({
-      where: {
-        OR: [{ authId: authUser.id }, { email: authUser.email }],
-      },
-      include: {
-        _count: {
-          select: {
-            transactions: true,
-            people: true,
-            debtRecords: true,
-            accounts: true,
-          },
-        },
-      },
-    })
-
-    if (matchingUsers.length <= 1) return
-
-    // Sort by count of records (most data first), then by authId match, then oldest
-    matchingUsers.sort((a, b) => {
-      const countA = a._count.transactions + a._count.people + a._count.debtRecords + a._count.accounts
-      const countB = b._count.transactions + b._count.people + b._count.debtRecords + b._count.accounts
-      if (countA !== countB) return countB - countA
-      if (a.authId === authUser.id) return -1
-      if (b.authId === authUser.id) return 1
-      return a.createdAt.getTime() - b.createdAt.getTime()
-    })
-
-    const primaryUser = matchingUsers[0]
-
-    for (let i = 1; i < matchingUsers.length; i++) {
-      const secondaryUser = matchingUsers[i]
-      if (secondaryUser.id === primaryUser.id) continue
-
-      console.log(`Merging secondary user ${secondaryUser.id} into primary user ${primaryUser.id}`)
-
-      // Transfer all relations to primary user
-      await prisma.transaction.updateMany({ where: { userId: secondaryUser.id }, data: { userId: primaryUser.id } })
-      await prisma.person.updateMany({ where: { userId: secondaryUser.id }, data: { userId: primaryUser.id } })
-      await prisma.account.updateMany({ where: { userId: secondaryUser.id }, data: { userId: primaryUser.id } })
-      await prisma.debtRecord.updateMany({ where: { userId: secondaryUser.id }, data: { userId: primaryUser.id } })
-      await prisma.settlement.updateMany({ where: { userId: secondaryUser.id }, data: { userId: primaryUser.id } })
-      await prisma.importBatch.updateMany({ where: { userId: secondaryUser.id }, data: { userId: primaryUser.id } })
-      await prisma.notification.updateMany({ where: { userId: secondaryUser.id }, data: { userId: primaryUser.id } })
-      await prisma.auditLog.updateMany({ where: { userId: secondaryUser.id }, data: { userId: primaryUser.id } })
-      await prisma.attachment.updateMany({ where: { userId: secondaryUser.id }, data: { userId: primaryUser.id } })
-      await prisma.personalLabel.updateMany({ where: { userId: secondaryUser.id }, data: { userId: primaryUser.id } })
-
-      // Clean up secondary user dependencies
-      await prisma.category.deleteMany({ where: { userId: secondaryUser.id } })
-      await prisma.userSettings.deleteMany({ where: { userId: secondaryUser.id } })
-      await prisma.user.delete({ where: { id: secondaryUser.id } }).catch(() => {})
-    }
-
-    // Ensure primary user is linked to authId & updated
-    await prisma.user.update({
-      where: { id: primaryUser.id },
-      data: {
-        authId: authUser.id,
-        email: authUser.email,
-        ...(googleAvatar ? { avatarUrl: googleAvatar } : {}),
-        ...(googleName ? { name: googleName } : {}),
-      },
-    })
-  } catch (e) {
-    console.error('Error merging duplicate users:', e)
   }
 }
