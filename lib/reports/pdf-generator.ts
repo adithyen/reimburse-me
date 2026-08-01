@@ -78,7 +78,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
   })
 
   // ---- LOGO AREA ----
-  page.drawText('₹', {
+  page.drawText('R', {
     x: margin,
     y: height - 55,
     size: 24,
@@ -289,7 +289,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
       page.drawText(`UPI: ${upiId}`, { x: margin + qrSize + 10, y: y - 25, size: 9, font: boldFont, color: DARK })
       page.drawText('Scan to pay instantly', { x: margin + qrSize + 10, y: y - 38, size: 8, font: regularFont, color: MUTED })
-      page.drawText(`₹${totalOutstanding.toLocaleString('en-IN')}`, { x: margin + qrSize + 10, y: y - 52, size: 14, font: boldFont, color: SUCCESS_COLOR })
+      page.drawText(`Rs. ${totalOutstanding.toLocaleString('en-IN')}`, { x: margin + qrSize + 10, y: y - 52, size: 14, font: boldFont, color: SUCCESS_COLOR })
 
       y -= qrSize + 20
     } catch (e) {
@@ -330,7 +330,7 @@ function formatDate(date: Date): string {
 }
 
 function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(amount)
+  return `Rs. ${Math.round(amount).toLocaleString('en-IN')}`
 }
 
 function truncate(str: string, max: number): string {

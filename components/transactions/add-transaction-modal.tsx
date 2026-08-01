@@ -131,30 +131,30 @@ export function AddTransactionModal({ open, onOpenChange }: AddTransactionModalP
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           {/* Type Selection */}
-          <div className="grid grid-cols-2 gap-2 p-1 bg-muted rounded-xl">
+          <div className="grid grid-cols-2 gap-2.5 p-1 bg-muted/60 rounded-xl">
             <button
               type="button"
               onClick={() => setType('DEBIT')}
-              className={`flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all border ${
                 type === 'DEBIT'
-                  ? 'bg-card text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
+                  ? 'bg-rose-500/20 text-rose-400 border-rose-500/50 shadow-md ring-2 ring-rose-500/30'
+                  : 'bg-muted/40 text-muted-foreground border-transparent hover:bg-muted hover:text-foreground'
               }`}
             >
-              <ArrowUpCircle className="h-4 w-4 text-primary" />
-              Debit (Expense)
+              <ArrowUpCircle className="h-4 w-4 text-rose-400" />
+              Debit (Expense) {type === 'DEBIT' && '✓'}
             </button>
             <button
               type="button"
               onClick={() => setType('CREDIT')}
-              className={`flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all border ${
                 type === 'CREDIT'
-                  ? 'bg-card text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 shadow-md ring-2 ring-emerald-500/30'
+                  : 'bg-muted/40 text-muted-foreground border-transparent hover:bg-muted hover:text-foreground'
               }`}
             >
-              <ArrowDownCircle className="h-4 w-4 text-emerald-500" />
-              Credit (Income)
+              <ArrowDownCircle className="h-4 w-4 text-emerald-400" />
+              Credit (Income) {type === 'CREDIT' && '✓'}
             </button>
           </div>
 
@@ -211,11 +211,11 @@ export function AddTransactionModal({ open, onOpenChange }: AddTransactionModalP
               <select
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-card focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
               >
-                <option value="">Select Account...</option>
+                <option value="" className="bg-card text-foreground">Select Account...</option>
                 {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
+                  <option key={acc.id} value={acc.id} className="bg-card text-foreground">
                     {acc.name}
                   </option>
                 ))}
@@ -229,11 +229,11 @@ export function AddTransactionModal({ open, onOpenChange }: AddTransactionModalP
               <select
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-card focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
               >
-                <option value="">Select Category...</option>
+                <option value="" className="bg-card text-foreground">Select Category...</option>
                 {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
+                  <option key={cat.id} value={cat.id} className="bg-card text-foreground">
                     {cat.name}
                   </option>
                 ))}

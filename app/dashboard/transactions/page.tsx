@@ -154,7 +154,7 @@ export default function TransactionsPage() {
   const handleAssign = (txnId: string) => {
     const txn = transactions.find((t: any) => t.id === txnId)
     setAssigningTxn(txnId)
-    setAssignTitle(txn?.merchant || '')
+    setAssignTitle(txn?.merchant && txn.merchant !== txn.rawNarration ? txn.merchant : '')
     setAssignSheetOpen(true)
   }
 

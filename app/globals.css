@@ -136,6 +136,23 @@ body {
   font-feature-settings: "cv02","cv03","cv04","cv11";
 }
 
+select option {
+  background-color: hsl(var(--card)) !important;
+  color: hsl(var(--card-foreground)) !important;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 /* ============================================================
    CUSTOM SCROLLBAR
    ============================================================ */

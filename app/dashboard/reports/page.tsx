@@ -74,7 +74,7 @@ export default function ReportsPage() {
               <Skeleton className="h-10 w-full rounded-lg" />
             ) : (
               <Select value={selectedPersonId} onValueChange={(val) => setSelectedPersonId(val || '')}>
-                <SelectTrigger className="text-sm">
+                <SelectTrigger className="w-full text-sm">
                   <SelectValue placeholder="Choose a contact..." />
                 </SelectTrigger>
                 <SelectContent>
