@@ -27,18 +27,27 @@ export default function ReportsPage() {
 
   const handleGenerateReport = async (personId: string) => {
     setIsGenerating(true)
-    toast.loading('Generating PDF receipt...')
+    const toastId = toast.loading('Generating PDF receipt...')
     try {
       const res = await fetch(`/api/reports/person/${personId}`)
-      const contentType = res.headers.get('content-type')
-      if (!res.ok || contentType?.includes('application/json')) {
+      const contentType = res.headers.get('content-type') || ''
+
+      if (!res.ok || contentType.includes('application/json')) {
         const json = await res.json().catch(() => ({}))
-        throw new Error(json.error || 'Failed to generate PDF')
+        const detail = json.detail || json.error || `HTTP ${res.status}`
+        toast.dismiss(toastId)
+        toast.error(`PDF Error: ${detail}`)
+        return
       }
 
       const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
+      if (blob.size < 100) {
+        toast.dismiss(toastId)
+        toast.error('PDF generation failed — response too small')
+        return
+      }
 
+      const url = URL.createObjectURL(blob)
       const safeName = (selectedPerson?.name || 'debt').replace(/[^a-zA-Z0-9]/g, '_')
       const filename = `receipt_${safeName}_${new Date().toISOString().split('T')[0]}.pdf`
 
@@ -51,13 +60,14 @@ export default function ReportsPage() {
       setTimeout(() => {
         if (document.body.contains(a)) document.body.removeChild(a)
         URL.revokeObjectURL(url)
-      }, 1000)
+      }, 1500)
 
-      toast.dismiss()
+      toast.dismiss(toastId)
       toast.success('Receipt downloaded!')
-    } catch (e) {
-      toast.dismiss()
-      toast.error(String(e))
+    } catch (e: unknown) {
+      toast.dismiss(toastId)
+      const msg = e instanceof Error ? e.message : String(e)
+      toast.error(`Failed: ${msg}`)
     } finally {
       setIsGenerating(false)
     }

@@ -29,24 +29,31 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   if (!person) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  let pdfBytes: Buffer
   try {
-    const pdfBytes = await generatePersonReceipt({
+    pdfBytes = await generatePersonReceipt({
       person,
       debts: person.debtRecords,
       generatedBy: user.name || user.email,
       upiId: user.upiId || undefined,
       generatedAt: new Date(),
     })
-
-    return new NextResponse(new Uint8Array(pdfBytes), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="receipt_${person.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf"`,
-      },
-    })
-  } catch (e) {
-    console.error('PDF generation error:', e)
-    return NextResponse.json({ error: 'Failed to generate PDF' }, { status: 500 })
+  } catch (e: unknown) {
+    const errMsg = e instanceof Error ? e.message : String(e)
+    console.error('[PDF] generatePersonReceipt threw:', errMsg)
+    return NextResponse.json({ error: 'PDF generation failed', detail: errMsg }, { status: 500 })
   }
+
+  const safeName = person.name.replace(/[^a-zA-Z0-9]/g, '_')
+  const dateStr = new Date().toISOString().split('T')[0]
+  const filename = `receipt_${safeName}_${dateStr}.pdf`
+
+  return new NextResponse(new Uint8Array(pdfBytes), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': String(pdfBytes.length),
+    },
+  })
 }
