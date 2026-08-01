@@ -25,18 +25,38 @@ export async function getOrCreateAuthUser(authUserParam?: any) {
   const googleName = metadata.name || metadata.full_name || authUser.email?.split('@')[0] || 'User'
 
   try {
-    // Search by authId OR by email (case-insensitive) to seamlessly match Email/Password and Google OAuth logins
-    let user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { authId: authUser.id },
-          ...(authUser.email ? [{ email: { equals: authUser.email, mode: 'insensitive' as const } }] : []),
-        ],
-      },
+    // 1. Try finding user by authId (Supabase auth.users.id)
+    let user = await prisma.user.findUnique({
+      where: { authId: authUser.id },
       include: { settings: true },
     })
 
-    // If still not found, create new user record for this user
+    // 2. If not found by authId, search by email to link account
+    if (!user && authUser.email) {
+      user = await prisma.user.findFirst({
+        where: { email: { equals: authUser.email, mode: 'insensitive' as const } },
+        include: { settings: true },
+      })
+
+      if (user) {
+        // Sync authId so that all queries find this user record
+        try {
+          user = await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              authId: authUser.id,
+              ...(googleAvatar ? { avatarUrl: googleAvatar } : {}),
+              ...(googleName && (!user.name || user.name === 'User') ? { name: googleName } : {}),
+            },
+            include: { settings: true },
+          })
+        } catch (e) {
+          console.error('Failed to link authId:', e)
+        }
+      }
+    }
+
+    // 3. If still not found, create new user record
     if (!user && authUser.email) {
       try {
         user = await prisma.user.create({
@@ -78,7 +98,7 @@ export async function getOrCreateAuthUser(authUserParam?: any) {
         })
       }
     } else if (user) {
-      // Update avatar or name if Google profile data is available
+      // 4. Update avatar or name if Google profile data is available
       const updates: Record<string, any> = {}
       if (googleAvatar && user.avatarUrl !== googleAvatar) {
         updates.avatarUrl = googleAvatar
@@ -100,7 +120,7 @@ export async function getOrCreateAuthUser(authUserParam?: any) {
       }
     }
 
-    // Ensure user settings object exists
+    // 5. Ensure user settings exist
     if (user && !user.settings) {
       try {
         const settings = await prisma.userSettings.create({

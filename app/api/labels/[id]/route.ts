@@ -1,17 +1,10 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getOrCreateAuthUser } from '@/lib/auth-user'
 import { prisma } from '@/lib/prisma'
-
-async function getAuthUser() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-  return prisma.user.findUnique({ where: { authId: user.id } })
-}
 
 // PUT /api/labels/[id]
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getAuthUser()
+  const user = await getOrCreateAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
@@ -52,7 +45,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
 // DELETE /api/labels/[id]
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getAuthUser()
+  const user = await getOrCreateAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
