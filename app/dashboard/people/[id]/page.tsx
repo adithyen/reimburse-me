@@ -84,38 +84,14 @@ export default function PersonDetailPage() {
   const handleGenerateReceipt = async () => {
     const toastId = toast.loading('Generating receipt...')
     try {
-      const res = await fetch(`/api/reports/person/${id}`)
-      const contentType = res.headers.get('content-type') || ''
-
-      if (!res.ok || contentType.includes('application/json')) {
-        const json = await res.json().catch(() => ({}))
-        const detail = json.detail || json.error || `HTTP ${res.status}`
-        toast.dismiss(toastId)
-        toast.error(`PDF Error: ${detail}`)
-        return
-      }
-
-      const blob = await res.blob()
-      if (blob.size < 100) {
-        toast.dismiss(toastId)
-        toast.error('PDF generation failed — file too small')
-        return
-      }
-
-      const url = URL.createObjectURL(blob)
-      const safeName = (data?.name || 'debt').replace(/[^a-zA-Z0-9]/g, '_')
-      const filename = `receipt_${safeName}_${new Date().toISOString().split('T')[0]}.pdf`
-
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-
-      setTimeout(() => {
-        if (document.body.contains(a)) document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-      }, 1500)
+      // Direct browser navigation — Chrome will use the Content-Disposition
+      // filename from the server header (no blob URL UUID issue)
+      const link = document.createElement('a')
+      link.href = `/api/reports/person/${id}`
+      link.download = (data?.name || 'receipt').replace(/[^a-zA-Z0-9]/g, '_') + `_${new Date().toISOString().split('T')[0]}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
 
       toast.dismiss(toastId)
       toast.success('Receipt downloaded!')
