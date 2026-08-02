@@ -27,10 +27,12 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
+  // Use getSession() instead of getUser() in middleware for fast local JWT validation without blocking network calls
   const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    data: { session },
+  } = await supabase.auth.getSession()
 
+  const user = session?.user || null
   const { pathname } = request.nextUrl
 
   // Redirect unauthenticated users to login

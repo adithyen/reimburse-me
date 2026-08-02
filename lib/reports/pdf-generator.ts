@@ -2,13 +2,15 @@
  * PDF Receipt Generator using pdf-lib
  * Generates a professional, branded PDF receipt for debt collection.
  * Features:
- * - Brand logo vector icon with inner document lines (matching website logo.tsx / icon.svg)
+ * - Brand logo vector graphic with thick bold strokes & rounded card badge (matching website icon.svg / logo.tsx)
  * - Person details (Prepared For) with clean alignment
  * - Total outstanding summary
  * - Itemized expenses table with 4 columns: DATE | TRANSACTION DESCRIPTION | LABEL | AMOUNT
  * - Expenses sorted by transaction date ASCENDING (oldest date first)
  * - Display original transaction date (date when expense occurred, not assignment date)
- * - Category shown under description
+ * - Category labeled as "Category: " under description
+ * - Vector Rupee symbol '₹' displayed for currency amounts
+ * - Detailed timestamp (date and time) in header and filename
  * - Em-dash / Hyphen '-' shown when label is not explicitly custom-set by user
  * - Pure ASCII text sanitization to guarantee 100% WinAnsi font compatibility without crash
  * - UPI QR code payment card
@@ -91,12 +93,12 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     color: BRAND_PRIMARY,
   })
 
-  // ---- BRAND LOGO BADGE (Matching icon.svg / logo.tsx) ----
+  // ---- BRAND LOGO BADGE (Matching icon.svg / logo.tsx with thick bold strokes) ----
   const logoX = margin
-  const logoY = height - 74
-  const logoSize = 38
+  const logoY = height - 76
+  const logoSize = 42
 
-  // White Card Background
+  // White Rounded Card Background
   page.drawRectangle({
     x: logoX,
     y: logoY,
@@ -111,49 +113,49 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
   const ox = logoX
   const oy = logoY + logoSize // invert Y for PDF coordinates
 
-  // Cyan Refresh Arc
+  // Cyan Refresh Arc (Thick bold stroke)
   page.drawSvgPath('M 215 105 C 130 135 100 240 140 325 C 180 410 280 435 365 390', {
     x: ox,
     y: oy,
     scale: s,
     borderColor: CYAN_COLOR,
-    borderWidth: 24 * s,
+    borderWidth: 42 * s,
   })
 
-  // Lime Green Arc
+  // Lime Green Arc (Thick bold stroke)
   page.drawSvgPath('M 365 390 C 420 350 445 265 410 195', {
     x: ox,
     y: oy,
     scale: s,
     borderColor: LIME_COLOR,
-    borderWidth: 24 * s,
+    borderWidth: 42 * s,
   })
 
-  // Arrow Head
+  // Arrow Head (Thick bold stroke)
   page.drawSvgPath('M 370 230 L 420 180 L 440 240', {
     x: ox,
     y: oy,
     scale: s,
     borderColor: LIME_COLOR,
-    borderWidth: 24 * s,
+    borderWidth: 42 * s,
   })
 
-  // Document Container
+  // Document Container (Thick bold stroke)
   page.drawSvgPath('M 190 120 H 320 C 331 120 340 129 340 140 V 290 L 300 330 H 190 C 179 330 170 321 170 310 V 140 C 170 129 179 120 190 120 Z', {
     x: ox,
     y: oy,
     scale: s,
     borderColor: CYAN_COLOR,
-    borderWidth: 16 * s,
+    borderWidth: 32 * s,
   })
 
-  // Folded Corner
+  // Folded Corner (Thick bold stroke)
   page.drawSvgPath('M 300 290 V 330 H 340', {
     x: ox,
     y: oy,
     scale: s,
     borderColor: CYAN_COLOR,
-    borderWidth: 16 * s,
+    borderWidth: 32 * s,
   })
 
   // Inner Document Header Bar & Lines
@@ -164,7 +166,7 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
   // ---- BRAND NAME & SUBTITLE ----
   page.drawText(cleanText('ReimburseMe'), {
-    x: margin + 48,
+    x: margin + 50,
     y: height - 52,
     size: 18,
     font: boldFont,
@@ -172,35 +174,37 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
   })
 
   page.drawText(cleanText('Personal Expense Recovery Platform'), {
-    x: margin + 48,
+    x: margin + 50,
     y: height - 67,
     size: 9,
     font: regularFont,
     color: rgb(0.85, 0.87, 1.0),
   })
 
-  // ---- RECEIPT TITLE & METADATA ----
+  // ---- RECEIPT TITLE & TIMESTAMP METADATA ----
   page.drawText(cleanText('EXPENSE RECEIPT'), {
-    x: width - margin - 140,
-    y: height - 48,
-    size: 14,
+    x: width - margin - 150,
+    y: height - 46,
+    size: 13,
     font: boldFont,
     color: rgb(1, 1, 1),
   })
 
-  page.drawText(cleanText(`Generated: ${formatDate(generatedAt)}`), {
-    x: width - margin - 140,
-    y: height - 64,
-    size: 8.5,
+  // Header timestamp with date and time AM/PM
+  const timestampHeaderStr = formatTimestamp(generatedAt)
+  page.drawText(cleanText(`Generated: ${timestampHeaderStr}`), {
+    x: width - margin - 150,
+    y: height - 62,
+    size: 7.5,
     font: regularFont,
     color: rgb(0.85, 0.87, 1.0),
   })
 
   if (generatedBy) {
     page.drawText(cleanText(`By: ${generatedBy}`), {
-      x: width - margin - 140,
-      y: height - 78,
-      size: 8.5,
+      x: width - margin - 150,
+      y: height - 76,
+      size: 7.5,
       font: regularFont,
       color: rgb(0.85, 0.87, 1.0),
     })
@@ -267,10 +271,12 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 
   y -= 22
 
-  page.drawText(cleanText(formatCurrency(totalOutstanding)), {
-    x: margin,
+  // Vector Rupee Symbol + Amount
+  drawRupeeSymbol(page, margin, y - 2, 16, BRAND_PRIMARY)
+  page.drawText(cleanText(Math.round(totalOutstanding).toLocaleString('en-IN')), {
+    x: margin + 16,
     y: y,
-    size: 26,
+    size: 24,
     font: boldFont,
     color: BRAND_PRIMARY,
   })
@@ -337,13 +343,14 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     if (y < 120) break
 
     const rawNarration = debt.debtTransactions?.[0]?.transaction?.rawNarration
+    const merchant = debt.debtTransactions?.[0]?.transaction?.merchant
     const descriptionText = cleanText(rawNarration || debt.title || 'Transaction')
 
     // Display original transaction date (date when expense actually occurred)
     const txnDate = debt.debtTransactions?.[0]?.transaction?.date || debt.createdAt
 
     // Only display label if user explicitly set a custom label (not auto-copied bank narration)
-    const hasCustomLabel = isUserCustomLabel(debt.title, rawNarration)
+    const hasCustomLabel = isUserCustomLabel(debt.title, rawNarration, merchant)
     const labelText = hasCustomLabel ? cleanText(debt.title) : '-'
     const catName = debt.category?.name ? cleanText(debt.category.name) : null
 
@@ -367,7 +374,6 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     }
 
     const dateStr = formatDate(new Date(txnDate))
-    const amtStr = formatCurrency(debt.outstandingAmount)
 
     // Date
     page.drawText(cleanText(dateStr), {
@@ -378,9 +384,10 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
       color: DARK,
     })
 
-    // Amount
-    page.drawText(cleanText(amtStr), {
-      x: cols.amount + 6,
+    // Vector Rupee + Amount
+    drawRupeeSymbol(page, cols.amount + 6, y - 10, 7.5, DARK)
+    page.drawText(cleanText(Math.round(debt.outstandingAmount).toLocaleString('en-IN')), {
+      x: cols.amount + 15,
       y: y - 10,
       size: 8.5,
       font: boldFont,
@@ -401,7 +408,8 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     }
 
     if (catName) {
-      page.drawText(cleanText(`Cat: ${catName}`), {
+      // Changed 'Cat: ' to 'Category: ' as requested
+      page.drawText(cleanText(`Category: ${catName}`), {
         x: cols.desc + 6,
         y: descY - 1,
         size: 7.5,
@@ -450,8 +458,10 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     font: boldFont,
     color: BRAND_PRIMARY,
   })
-  page.drawText(cleanText(formatCurrency(totalOutstanding)), {
-    x: cols.amount + 6,
+
+  drawRupeeSymbol(page, cols.amount + 6, y - 13, 9, BRAND_PRIMARY)
+  page.drawText(cleanText(Math.round(totalOutstanding).toLocaleString('en-IN')), {
+    x: cols.amount + 17,
     y: y - 13,
     size: 11,
     font: boldFont,
@@ -505,8 +515,10 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
         font: regularFont,
         color: MUTED,
       })
-      page.drawText(cleanText(`Rs. ${totalOutstanding.toLocaleString('en-IN')}`), {
-        x: margin + qrSize + 14,
+
+      drawRupeeSymbol(page, margin + qrSize + 14, y - 54, 11, SUCCESS_COLOR)
+      page.drawText(cleanText(Math.round(totalOutstanding).toLocaleString('en-IN')), {
+        x: margin + qrSize + 27,
         y: y - 54,
         size: 14,
         font: boldFont,
@@ -536,8 +548,8 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
     color: MUTED,
   })
 
-  page.drawText(cleanText(`Document generated on ${formatDate(generatedAt)}`), {
-    x: width - margin - 170,
+  page.drawText(cleanText(`Document generated on ${formatTimestamp(generatedAt)}`), {
+    x: width - margin - 190,
     y: footerY - 14,
     size: 8,
     font: regularFont,
@@ -549,15 +561,31 @@ export async function generatePersonReceipt(input: ReportInput): Promise<Buffer>
 }
 
 // ---- Helpers ----
-function isUserCustomLabel(title: string | null | undefined, rawNarration: string | null | undefined): boolean {
+function isUserCustomLabel(title: string | null | undefined, rawNarration: string | null | undefined, merchant?: string | null): boolean {
   if (!title) return false
-  if (!rawNarration) return true
-  const cleanTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '')
-  const cleanNarration = rawNarration.toLowerCase().replace(/[^a-z0-9]/g, '')
-  if (!cleanTitle) return false
-  if (cleanTitle === cleanNarration) return false
-  if (cleanNarration.includes(cleanTitle) || cleanTitle.includes(cleanNarration)) return false
+  const normTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '').trim()
+  if (!normTitle) return false
+
+  const normNarration = (rawNarration || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim()
+  const normMerchant = (merchant || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim()
+
+  if (normTitle === normNarration || normTitle === normMerchant) return false
+  if (normNarration.length > 4 && (normNarration.includes(normTitle) || normTitle.includes(normNarration))) return false
+  if (normMerchant.length > 4 && (normMerchant.includes(normTitle) || normTitle.includes(normMerchant))) return false
+
   return true
+}
+
+function drawRupeeSymbol(page: any, x: number, y: number, size: number, color: any) {
+  const scale = size / 10
+  // Top bar
+  page.drawLine({ start: { x, y: y + 8 * scale }, end: { x: x + 6.5 * scale, y: y + 8 * scale }, thickness: 1 * scale, color })
+  // Middle bar
+  page.drawLine({ start: { x, y: y + 5 * scale }, end: { x: x + 6 * scale, y: y + 5 * scale }, thickness: 1 * scale, color })
+  // Vertical stem & curve
+  page.drawLine({ start: { x: x + 1.2 * scale, y: y + 8 * scale }, end: { x: x + 1.2 * scale, y: y + 3 * scale }, thickness: 1 * scale, color })
+  // Diagonal leg
+  page.drawLine({ start: { x: x + 1.5 * scale, y: y + 3.5 * scale }, end: { x: x + 5.5 * scale, y: y }, thickness: 1 * scale, color })
 }
 
 function cleanText(text: string | null | undefined): string {
@@ -577,8 +605,16 @@ function formatDate(date: Date): string {
   return `${d.getDate().toString().padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`
 }
 
-function formatCurrency(amount: number): string {
-  return `Rs. ${Math.round(amount).toLocaleString('en-IN')}`
+function formatTimestamp(date: Date): string {
+  const d = new Date(date)
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const datePart = `${d.getDate().toString().padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`
+  const hours = d.getHours()
+  const minutes = d.getMinutes().toString().padStart(2, '0')
+  const seconds = d.getSeconds().toString().padStart(2, '0')
+  const ampm = hours >= 12 ? 'PM' : 'AM'
+  const h12 = (hours % 12 || 12).toString().padStart(2, '0')
+  return `${datePart}, ${h12}:${minutes}:${seconds} ${ampm}`
 }
 
 function wrapText(str: string, maxCharsPerLine: number): string[] {

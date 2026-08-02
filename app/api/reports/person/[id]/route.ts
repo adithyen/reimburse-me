@@ -30,17 +30,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!person) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   try {
+    const now = new Date()
     const pdfBytes = await generatePersonReceipt({
       person,
       debts: person.debtRecords,
       generatedBy: user.name || user.email,
       upiId: user.upiId || undefined,
-      generatedAt: new Date(),
+      generatedAt: now,
     })
 
     const safeName = person.name.replace(/[^a-zA-Z0-9]/g, '_')
-    const dateStr = new Date().toISOString().split('T')[0]
-    const filename = `receipt_${safeName}_${dateStr}.pdf`
+    const dateStr = now.toISOString().split('T')[0]
+    const hours = now.getHours().toString().padStart(2, '0')
+    const minutes = now.getMinutes().toString().padStart(2, '0')
+    const seconds = now.getSeconds().toString().padStart(2, '0')
+    const filename = `receipt_${safeName}_${dateStr}_${hours}${minutes}${seconds}.pdf`
 
     return new NextResponse(new Uint8Array(pdfBytes), {
       status: 200,

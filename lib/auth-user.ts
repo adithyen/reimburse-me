@@ -39,7 +39,6 @@ export async function getOrCreateAuthUser(authUserParam?: any) {
       })
 
       if (user) {
-        // Sync authId so that all queries find this user record
         try {
           user = await prisma.user.update({
             where: { id: user.id },
@@ -97,30 +96,9 @@ export async function getOrCreateAuthUser(authUserParam?: any) {
           include: { settings: true },
         })
       }
-    } else if (user) {
-      // 4. Update avatar or name if Google profile data is available
-      const updates: Record<string, any> = {}
-      if (googleAvatar && user.avatarUrl !== googleAvatar) {
-        updates.avatarUrl = googleAvatar
-      }
-      if (googleName && (!user.name || user.name === 'User')) {
-        updates.name = googleName
-      }
-
-      if (Object.keys(updates).length > 0) {
-        try {
-          user = await prisma.user.update({
-            where: { id: user.id },
-            data: updates,
-            include: { settings: true },
-          })
-        } catch (e) {
-          console.error('Error updating user profile metadata:', e)
-        }
-      }
     }
 
-    // 5. Ensure user settings exist
+    // 4. Ensure user settings exist
     if (user && !user.settings) {
       try {
         const settings = await prisma.userSettings.create({
