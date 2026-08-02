@@ -37,6 +37,7 @@ export interface IStatementParser {
 
 export interface ParseOptions {
   accountId?: string
+  fileName?: string
   password?: string             // for password-protected files (already decrypted before parse)
   skipRows?: number             // manually skip N header rows
   dateFormat?: string           // override date format detection
