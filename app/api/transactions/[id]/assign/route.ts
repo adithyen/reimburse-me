@@ -25,8 +25,11 @@ export async function POST(
   const person = await prisma.person.findFirst({ where: { id: personId, userId: user.id } })
   if (!person) return NextResponse.json({ error: 'Person not found' }, { status: 404 })
 
-  const amount = assignedAmount ? parseFloat(assignedAmount) : transaction.amount
-  if (amount > transaction.amount) {
+  const amount = assignedAmount !== undefined ? parseFloat(String(assignedAmount)) : transaction.amount
+  if (isNaN(amount) || amount <= 0) {
+    return NextResponse.json({ error: 'Assigned amount must be a positive number' }, { status: 400 })
+  }
+  if (amount > transaction.amount + 0.01) {
     return NextResponse.json({ error: 'Assigned amount cannot exceed transaction amount' }, { status: 400 })
   }
 
@@ -81,12 +84,17 @@ export async function POST(
     update: { assignedAmount: amount, notes: notes || null },
   })
 
-  // Update transaction status and merchant title
-  const remainingAmount = transaction.amount - amount
+  // Calculate total assigned so far across all debt transactions for this transaction
+  const existingDebtTxns = await prisma.debtTransaction.findMany({
+    where: { transactionId: id },
+  })
+  const totalAssigned = existingDebtTxns.reduce((sum, dt) => sum + dt.assignedAmount, 0)
+  const remainingAmount = Math.max(0, transaction.amount - totalAssigned)
+
   await prisma.transaction.update({
     where: { id },
     data: {
-      status: remainingAmount <= 0 ? 'ASSIGNED' : 'PARTIAL',
+      status: remainingAmount <= 0.01 ? 'ASSIGNED' : 'PARTIAL',
       isRecoverable: true,
       ...(title ? { merchant: title.trim() } : {}),
     },

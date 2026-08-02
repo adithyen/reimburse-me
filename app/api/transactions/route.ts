@@ -31,7 +31,11 @@ export async function GET(request: Request) {
         { referenceNumber: { contains: search, mode: 'insensitive' } },
       ],
     }),
-    ...(status && { status: status as Prisma.EnumTransactionStatusFilter }),
+    ...(status && (
+      status === 'UNASSIGNED'
+        ? { status: { in: ['UNASSIGNED', 'PARTIAL'] } }
+        : { status: status as Prisma.EnumTransactionStatusFilter }
+    )),
     ...(type && { type: type as Prisma.EnumTransactionTypeFilter }),
     ...(categoryId && { categoryId }),
     ...(accountId && { accountId }),
@@ -67,9 +71,9 @@ export async function GET(request: Request) {
     prisma.transaction.count({ where }),
   ])
 
-  // Count unassigned DEBIT transactions
+  // Count unassigned and partial DEBIT transactions
   const unassignedCount = await prisma.transaction.count({
-    where: { userId: user.id, status: 'UNASSIGNED', type: 'DEBIT' },
+    where: { userId: user.id, status: { in: ['UNASSIGNED', 'PARTIAL'] }, type: 'DEBIT' },
   })
 
   return NextResponse.json({

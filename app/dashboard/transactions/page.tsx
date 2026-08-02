@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Upload, Filter, Search, ArrowUpCircle, ArrowDownCircle, Tag, CheckSquare,
   Square, UserPlus, AlertTriangle, RefreshCw, X, ChevronDown, Inbox,
-  List, SlidersHorizontal, Plus, Trash2,
+  List, SlidersHorizontal, Plus, Trash2, Split, Calculator, Percent,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -32,7 +32,11 @@ type Transaction = {
   source: string
   category: { name: string; color: string; slug: string } | null
   account: { name: string; color: string } | null
-  debtTransactions: Array<{ debtRecord: { person: { name: string; color: string } } }>
+  debtTransactions: Array<{
+    id: string
+    assignedAmount: number
+    debtRecord: { id: string; person: { id: string; name: string; color: string } }
+  }>
   personalLabels?: Array<{ id: string; name: string; color: string }>
 }
 
@@ -72,6 +76,11 @@ export default function TransactionsPage() {
     count?: number
   } | null>(null)
 
+  // Split assignment state
+  const [splitMode, setSplitMode] = useState<'full' | 'equal' | 'custom'>('full')
+  const [equalSplitWays, setEqualSplitWays] = useState<number>(2)
+  const [customAmountStr, setCustomAmountStr] = useState<string>('')
+
   const { importModalOpen, setImportModalOpen } = useUIStore()
 
   const filters = tab === 'inbox'
@@ -105,11 +114,25 @@ export default function TransactionsPage() {
   })
 
   const assignMutation = useMutation({
-    mutationFn: async ({ txnId, personId, title }: { txnId: string; personId: string; title?: string }) => {
+    mutationFn: async ({
+      txnId,
+      personId,
+      title,
+      assignedAmount,
+    }: {
+      txnId: string
+      personId: string
+      title?: string
+      assignedAmount?: number
+    }) => {
       const res = await fetch(`/api/transactions/${txnId}/assign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personId, title: title || undefined }),
+        body: JSON.stringify({
+          personId,
+          title: title || undefined,
+          assignedAmount: assignedAmount !== undefined ? assignedAmount : undefined,
+        }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
       return res.json()
@@ -123,6 +146,8 @@ export default function TransactionsPage() {
       setAssignSheetOpen(false)
       setAssigningTxn(null)
       setAssignTitle('')
+      setSplitMode('full')
+      setCustomAmountStr('')
       setSelectedIds(new Set())
     },
     onError: (e: Error) => toast.error(e.message),
@@ -206,8 +231,33 @@ export default function TransactionsPage() {
     const txn = transactions.find((t: any) => t.id === txnId)
     setAssigningTxn(txnId)
     setAssignTitle(txn?.merchant && txn.merchant !== txn.rawNarration ? txn.merchant : '')
+    setSplitMode('full')
+    setEqualSplitWays(2)
+    setCustomAmountStr('')
     setAssignSheetOpen(true)
   }
+
+  const activeTxn = assigningTxn ? transactions.find((t: any) => t.id === assigningTxn) : null
+  const activeTxnAlreadyAssigned = activeTxn?.debtTransactions?.reduce((sum: number, dt: any) => sum + (dt.assignedAmount || 0), 0) || 0
+  const activeTxnRemaining = activeTxn ? Math.max(0, activeTxn.amount - activeTxnAlreadyAssigned) : 0
+
+  const effectiveAssignAmount = (() => {
+    if (!activeTxn) return undefined
+    if (splitMode === 'full') {
+      return activeTxnRemaining > 0 ? activeTxnRemaining : activeTxn.amount
+    }
+    if (splitMode === 'equal') {
+      const ways = Math.max(2, equalSplitWays)
+      const perShare = Math.round((activeTxn.amount / ways) * 100) / 100
+      return Math.min(activeTxn.amount, perShare)
+    }
+    if (splitMode === 'custom') {
+      const val = parseFloat(customAmountStr)
+      if (isNaN(val) || val <= 0) return activeTxnRemaining > 0 ? activeTxnRemaining : activeTxn.amount
+      return Math.min(activeTxn.amount, Math.round(val * 100) / 100)
+    }
+    return activeTxn.amount
+  })()
 
   const handleOpenEditLabel = (txn: Transaction) => {
     setEditingTxn({ id: txn.id, merchant: txn.merchant, rawNarration: txn.rawNarration })
@@ -439,33 +489,217 @@ export default function TransactionsPage() {
 
       {/* Assign Dialog */}
       <Dialog open={assignSheetOpen} onOpenChange={setAssignSheetOpen}>
-        <DialogContent className="sm:max-w-md p-5 flex flex-col gap-4">
+        <DialogContent className="sm:max-w-lg p-5 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
           <DialogHeader className="px-0 pb-0 flex-shrink-0">
-            <DialogTitle>Assign to Person</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-primary" />
+              {assigningTxn ? 'Assign / Split Transaction' : 'Assign Transactions'}
+            </DialogTitle>
           </DialogHeader>
 
           {/* Context of what is being assigned */}
-          <div className="bg-muted/50 p-3 rounded-lg border border-border">
-            {assigningTxn ? (() => {
-              const txn = transactions.find((t: any) => t.id === assigningTxn);
-              if (!txn) return null;
-              return (
-                <div className="flex items-center justify-between">
+          <div className="bg-muted/50 p-3.5 rounded-xl border border-border">
+            {activeTxn ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex flex-col min-w-0">
-                    <span className="text-sm font-medium truncate">{txn.merchant || txn.rawNarration}</span>
-                    <span className="text-xs text-muted-foreground">{formatDateShort(new Date(txn.date))}</span>
+                    <span className="text-sm font-semibold truncate text-foreground">
+                      {activeTxn.merchant || activeTxn.rawNarration}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatDateShort(new Date(activeTxn.date))} · {activeTxn.source}
+                    </span>
                   </div>
-                  <span className={`text-sm font-bold ${txn.type === 'CREDIT' ? 'text-color-success' : ''}`}>
-                    {txn.type === 'CREDIT' ? '+' : '-'}{formatCurrency(txn.amount)}
-                  </span>
+                  <div className="text-right">
+                    <span className={`text-base font-bold ${activeTxn.type === 'CREDIT' ? 'text-emerald-500' : 'text-foreground'}`}>
+                      {activeTxn.type === 'CREDIT' ? '+' : '-'}{formatCurrency(activeTxn.amount)}
+                    </span>
+                  </div>
                 </div>
-              )
-            })() : (
+
+                {/* Existing assignments if any */}
+                {activeTxn.debtTransactions && activeTxn.debtTransactions.length > 0 && (
+                  <div className="pt-2 border-t border-border/50 text-xs flex items-center justify-between text-muted-foreground">
+                    <span>Already assigned: <strong className="text-foreground">{formatCurrency(activeTxnAlreadyAssigned)}</strong></span>
+                    <span>Remaining: <strong className="text-primary">{formatCurrency(activeTxnRemaining)}</strong></span>
+                  </div>
+                )}
+              </div>
+            ) : (
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">{selectedIds.size} transactions selected</span>
               </div>
             )}
           </div>
+
+          {/* Split Mode Selector (only for single transaction assignment) */}
+          {assigningTxn && activeTxn && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground">
+                  Assignment Mode
+                </label>
+                {effectiveAssignAmount && (
+                  <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                    Assigning {formatCurrency(effectiveAssignAmount)}
+                  </span>
+                )}
+              </div>
+
+              {/* Mode Tabs */}
+              <div className="grid grid-cols-3 p-1 rounded-xl bg-muted/70 border border-border text-xs font-medium">
+                <button
+                  type="button"
+                  onClick={() => setSplitMode('full')}
+                  className={cn(
+                    'py-2 px-2 rounded-lg transition-all text-center flex items-center justify-center gap-1.5',
+                    splitMode === 'full'
+                      ? 'bg-card text-foreground font-semibold shadow-sm border border-border/50'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <span>Full Amount</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSplitMode('equal')}
+                  className={cn(
+                    'py-2 px-2 rounded-lg transition-all text-center flex items-center justify-center gap-1.5',
+                    splitMode === 'equal'
+                      ? 'bg-card text-foreground font-semibold shadow-sm border border-border/50'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Split className="h-3.5 w-3.5" />
+                  <span>Equal Split</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSplitMode('custom')
+                    if (!customAmountStr) setCustomAmountStr(String(Math.round(activeTxn.amount / 2)))
+                  }}
+                  className={cn(
+                    'py-2 px-2 rounded-lg transition-all text-center flex items-center justify-center gap-1.5',
+                    splitMode === 'custom'
+                      ? 'bg-card text-foreground font-semibold shadow-sm border border-border/50'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Calculator className="h-3.5 w-3.5" />
+                  <span>Custom (₹)</span>
+                </button>
+              </div>
+
+              {/* Equal Split Sub-controls */}
+              {splitMode === 'equal' && (
+                <div className="p-3.5 rounded-xl bg-card border border-border space-y-3 shadow-sm">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-xs text-muted-foreground font-medium">
+                      Split equally between:
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {[2, 3, 4, 5, 6].map((ways) => (
+                        <button
+                          key={ways}
+                          type="button"
+                          onClick={() => setEqualSplitWays(ways)}
+                          className={cn(
+                            'w-8 h-7 rounded-lg text-xs font-bold border transition-all',
+                            equalSplitWays === ways
+                              ? 'bg-primary text-white border-primary shadow-sm'
+                              : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                          )}
+                        >
+                          {ways}
+                        </button>
+                      ))}
+                      <div className="flex items-center gap-1 ml-1">
+                        <input
+                          type="number"
+                          min="2"
+                          max="50"
+                          value={equalSplitWays}
+                          onChange={(e) => setEqualSplitWays(Math.max(2, parseInt(e.target.value) || 2))}
+                          className="w-12 h-7 px-1.5 text-xs text-center font-bold rounded-lg border border-border bg-muted/40 focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                        <span className="text-[11px] text-muted-foreground">ways</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs bg-muted/50 p-2.5 rounded-lg border border-border/40">
+                    <div>
+                      <span className="text-muted-foreground">Each person's share: </span>
+                      <span className="font-bold text-foreground text-sm">
+                        {formatCurrency(Math.round((activeTxn.amount / Math.max(2, equalSplitWays)) * 100) / 100)}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-emerald-500 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded">
+                      Assign 1 share
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    💡 <strong>Flexible Split:</strong> Only 1 share ({formatCurrency(Math.round((activeTxn.amount / Math.max(2, equalSplitWays)) * 100) / 100)}) will be assigned to the selected person. You are not forced to assign the other shares.
+                  </p>
+                </div>
+              )}
+
+              {/* Custom Split Sub-controls */}
+              {splitMode === 'custom' && (
+                <div className="p-3.5 rounded-xl bg-card border border-border space-y-3 shadow-sm">
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground font-medium block">
+                      Enter exact amount to assign to this person:
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">
+                        ₹
+                      </span>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0.01"
+                        max={activeTxn.amount}
+                        value={customAmountStr}
+                        onChange={(e) => setCustomAmountStr(e.target.value)}
+                        placeholder="e.g. 20.00"
+                        className="w-full pl-7 pr-3.5 py-2 text-sm font-bold rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick percentage presets */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[
+                      { label: '25%', frac: 0.25 },
+                      { label: 'Half (50%)', frac: 0.5 },
+                      { label: '75%', frac: 0.75 },
+                    ].map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => setCustomAmountStr((activeTxn.amount * preset.frac).toFixed(2))}
+                        className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground border border-border transition-colors"
+                      >
+                        {preset.label} (₹{(activeTxn.amount * preset.frac).toFixed(0)})
+                      </button>
+                    ))}
+                  </div>
+
+                  {parseFloat(customAmountStr) > 0 && parseFloat(customAmountStr) < activeTxn.amount && (
+                    <div className="text-[11px] flex items-center justify-between text-muted-foreground bg-muted/30 p-2 rounded-lg">
+                      <span>Remaining unassigned:</span>
+                      <span className="font-bold text-foreground">
+                        {formatCurrency(Math.max(0, activeTxn.amount - parseFloat(customAmountStr)))}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Label / Title input */}
           {assigningTxn && (
@@ -483,34 +717,53 @@ export default function TransactionsPage() {
             </div>
           )}
 
-          <div className="space-y-2 overflow-y-auto max-h-[45vh] pr-1">
-            {people?.map((person) => (
-              <button
-                key={person.id}
-                onClick={() => {
-                  if (assigningTxn) {
-                    assignMutation.mutate({ txnId: assigningTxn, personId: person.id, title: assignTitle.trim() || undefined })
-                  } else {
-                    handleBulkAssign(person.id)
-                  }
-                }}
-                className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-accent transition-colors border border-transparent hover:border-primary/20"
-              >
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm"
-                  style={{ backgroundColor: person.color }}
+          {/* People list */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground block mb-1">
+              Select Person to Assign:
+            </label>
+            <div className="space-y-1.5 overflow-y-auto max-h-[35vh] pr-1">
+              {people?.map((person) => (
+                <button
+                  key={person.id}
+                  onClick={() => {
+                    if (assigningTxn) {
+                      assignMutation.mutate({
+                        txnId: assigningTxn,
+                        personId: person.id,
+                        title: assignTitle.trim() || undefined,
+                        assignedAmount: effectiveAssignAmount,
+                      })
+                    } else {
+                      handleBulkAssign(person.id)
+                    }
+                  }}
+                  disabled={assignMutation.isPending}
+                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-accent transition-colors border border-border/50 hover:border-primary/30 group text-left"
                 >
-                  {person.name.charAt(0)}
-                </div>
-                <div className="text-left">
-                  <p className="font-medium text-foreground text-sm">{person.name}</p>
-                  {person.relationship && <p className="text-xs text-muted-foreground">{person.relationship}</p>}
-                </div>
-              </button>
-            ))}
-            {(!people || people.length === 0) && (
-              <p className="text-sm text-muted-foreground text-center py-4">No contacts yet. Add people first.</p>
-            )}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                      style={{ backgroundColor: person.color }}
+                    >
+                      {person.name.charAt(0)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground text-sm truncate">{person.name}</p>
+                      {person.relationship && <p className="text-xs text-muted-foreground truncate">{person.relationship}</p>}
+                    </div>
+                  </div>
+                  {effectiveAssignAmount && (
+                    <span className="text-xs font-semibold text-primary group-hover:underline flex-shrink-0 ml-2">
+                      Assign {formatCurrency(effectiveAssignAmount)} →
+                    </span>
+                  )}
+                </button>
+              ))}
+              {(!people || people.length === 0) && (
+                <p className="text-sm text-muted-foreground text-center py-4">No contacts yet. Add people first.</p>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -618,10 +871,22 @@ function TransactionList({
                   {txn.category.name}
                 </span>
               )}
-              {txn.debtTransactions?.[0] && (
-                <span className="text-[10px] text-primary font-medium">
-                  → {txn.debtTransactions[0].debtRecord.person.name}
-                </span>
+              {txn.debtTransactions && txn.debtTransactions.length > 0 && (
+                <div className="flex items-center gap-1 flex-wrap">
+                  {txn.debtTransactions.map((dt: any) => (
+                    <span
+                      key={dt.id}
+                      className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-primary/10 text-primary border border-primary/20"
+                    >
+                      → {dt.debtRecord?.person?.name} ({formatCurrency(dt.assignedAmount)})
+                    </span>
+                  ))}
+                  {txn.status === 'PARTIAL' && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                      Partial
+                    </span>
+                  )}
+                </div>
               )}
               {txn.personalLabels?.map(l => (
                 <span key={l.id} className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: `${l.color}20`, color: l.color }}>
@@ -663,13 +928,13 @@ function TransactionList({
             >
               <Tag className="h-3 w-3 text-primary" /> Label
             </button>
-            {(showAssignActions || txn.status === 'UNASSIGNED') ? (
+            {(showAssignActions || txn.status === 'UNASSIGNED' || txn.status === 'PARTIAL') ? (
               <>
                 <button
                   onClick={() => onAssign(txn.id)}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-primary/15 text-primary hover:bg-primary/25 transition-colors"
                 >
-                  <UserPlus className="h-3 w-3" /> Assign
+                  <UserPlus className="h-3 w-3" /> {txn.status === 'PARTIAL' ? 'Split More' : 'Assign'}
                 </button>
                 <button
                   onClick={() => onMarkPersonal(txn.id)}
@@ -684,7 +949,7 @@ function TransactionList({
                   onClick={() => onAssign(txn.id)}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-primary/15 text-primary hover:bg-primary/25 transition-colors"
                 >
-                  Reassign
+                  Split / Edit
                 </button>
                 <button
                   onClick={() => onUnassign(txn.id)}
@@ -695,10 +960,10 @@ function TransactionList({
               </>
             ) : txn.status === 'PERSONAL' ? (
               <button
-                  onClick={() => onMarkPersonal(txn.id)}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-muted text-muted-foreground hover:bg-accent transition-colors"
-                >
-                  Edit Labels
+                onClick={() => onMarkPersonal(txn.id)}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-muted text-muted-foreground hover:bg-accent transition-colors"
+              >
+                Edit Labels
               </button>
             ) : null}
             <button
