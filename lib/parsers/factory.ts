@@ -192,12 +192,20 @@ export async function extractPdfText(buffer: Buffer, password?: string): Promise
 
     const pdfjsMod = pdfjsLib.default || pdfjsLib
 
-    // Set valid workerSrc for pdfjs-dist server-side worker execution
+    // Set valid file:/// workerSrc for pdfjs-dist ESM loader compatibility
     if (pdfjsMod.GlobalWorkerOptions) {
       try {
-        pdfjsMod.GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')
+        const { pathToFileURL } = require('url')
+        const workerPath = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')
+        pdfjsMod.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href
       } catch {
-        pdfjsMod.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsMod.version || '4.9.155'}/pdf.worker.min.mjs`
+        try {
+          const { pathToFileURL } = require('url')
+          const workerPath = require.resolve('pdfjs-dist/build/pdf.worker.mjs')
+          pdfjsMod.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href
+        } catch {
+          // Fallback
+        }
       }
     }
 
