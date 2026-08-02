@@ -192,14 +192,20 @@ export async function extractPdfText(buffer: Buffer, password?: string): Promise
 
     const pdfjsMod = pdfjsLib.default || pdfjsLib
 
-    // Disable worker for server-side use
+    // Set valid workerSrc for pdfjs-dist server-side worker execution
     if (pdfjsMod.GlobalWorkerOptions) {
-      pdfjsMod.GlobalWorkerOptions.workerSrc = ''
+      try {
+        pdfjsMod.GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')
+      } catch {
+        pdfjsMod.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsMod.version || '4.9.155'}/pdf.worker.min.mjs`
+      }
     }
 
     const loadingTask = pdfjsMod.getDocument({
       data: new Uint8Array(buffer),
       ...(password ? { password } : {}),
+      isEvalSupported: false,
+      useSystemFonts: true,
     })
 
     const pdf = await loadingTask.promise
