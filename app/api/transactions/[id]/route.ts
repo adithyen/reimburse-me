@@ -43,9 +43,37 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
 
-  const existing = await prisma.transaction.findFirst({ where: { id, userId: user.id } })
+  const existing = await prisma.transaction.findFirst({
+    where: { id, userId: user.id },
+    include: { debtTransactions: true },
+  })
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  // Adjust any linked debt records
+  for (const dt of existing.debtTransactions) {
+    const debt = await prisma.debtRecord.findUnique({ where: { id: dt.debtRecordId } })
+    if (debt) {
+      const newTotal = Math.max(0, debt.totalAmount - dt.assignedAmount)
+      const newOutstanding = Math.max(0, debt.outstandingAmount - dt.assignedAmount)
+      if (newTotal === 0 && debt.recoveredAmount === 0) {
+        await prisma.debtRecord.delete({ where: { id: dt.debtRecordId } }).catch(() => {})
+      } else {
+        await prisma.debtRecord.update({
+          where: { id: dt.debtRecordId },
+          data: {
+            totalAmount: newTotal,
+            outstandingAmount: newOutstanding,
+            ...(newOutstanding === 0 && { status: 'SETTLED' }),
+          },
+        }).catch(() => {})
+      }
+    }
+  }
+
+  // Delete linked debtTransactions
+  await prisma.debtTransaction.deleteMany({ where: { transactionId: id } })
+
+  // Delete transaction
   await prisma.transaction.delete({ where: { id } })
   return NextResponse.json({ success: true })
 }

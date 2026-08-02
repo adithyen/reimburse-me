@@ -131,3 +131,75 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ success: true, data: transaction }, { status: 201 })
 }
+
+// DELETE /api/transactions — bulk delete or delete all
+export async function DELETE(request: Request) {
+  const user = await getOrCreateAuthUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await request.json().catch(() => ({}))
+  const { ids, deleteAll } = body
+
+  if (!deleteAll && (!Array.isArray(ids) || ids.length === 0)) {
+    return NextResponse.json({ error: 'ids array or deleteAll: true required' }, { status: 400 })
+  }
+
+  const whereTxn = {
+    userId: user.id,
+    ...(deleteAll ? {} : { id: { in: ids as string[] } }),
+  }
+
+  // Find target transactions
+  const txns = await prisma.transaction.findMany({
+    where: whereTxn,
+    include: { debtTransactions: true },
+  })
+
+  if (txns.length === 0) {
+    return NextResponse.json({ success: true, count: 0 })
+  }
+
+  const targetIds = txns.map((t) => t.id)
+
+  // Collect debt record adjustments
+  const debtAdjustments = new Map<string, number>()
+  for (const t of txns) {
+    for (const dt of t.debtTransactions) {
+      const current = debtAdjustments.get(dt.debtRecordId) || 0
+      debtAdjustments.set(dt.debtRecordId, current + dt.assignedAmount)
+    }
+  }
+
+  // Update debt records
+  for (const [debtRecordId, decAmt] of debtAdjustments.entries()) {
+    const debt = await prisma.debtRecord.findUnique({ where: { id: debtRecordId } })
+    if (debt) {
+      const newTotal = Math.max(0, debt.totalAmount - decAmt)
+      const newOutstanding = Math.max(0, debt.outstandingAmount - decAmt)
+      if (newTotal === 0 && debt.recoveredAmount === 0) {
+        await prisma.debtRecord.delete({ where: { id: debtRecordId } }).catch(() => {})
+      } else {
+        await prisma.debtRecord.update({
+          where: { id: debtRecordId },
+          data: {
+            totalAmount: newTotal,
+            outstandingAmount: newOutstanding,
+            ...(newOutstanding === 0 && { status: 'SETTLED' }),
+          },
+        }).catch(() => {})
+      }
+    }
+  }
+
+  // Delete debt transactions
+  await prisma.debtTransaction.deleteMany({
+    where: { transactionId: { in: targetIds } },
+  })
+
+  // Delete transactions
+  const result = await prisma.transaction.deleteMany({
+    where: { id: { in: targetIds }, userId: user.id },
+  })
+
+  return NextResponse.json({ success: true, count: result.count })
+}

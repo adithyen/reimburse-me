@@ -106,37 +106,72 @@ export function categorizeTransaction(narration: string): CategoryMatch {
 }
 
 export function extractMerchant(narration: string): string {
-  // Common Indian bank narration patterns:
-  // UPI/SWIGGY TECHNOLOGIES PR/UPI REF/...
-  // IMPS/123456/Swiggy/...
-  // POS/AMAZON/...
-  // NEFT/HDFC/John Doe/...
+  if (!narration) return ''
+  const trimmed = narration.trim()
 
-  const patterns = [
-    // UPI pattern: UPI/MERCHANT NAME/...
-    /^UPI[/-]([^/\-|]+)/i,
-    // IMPS/NEFT: IMPS/ref/NAME/...
-    /^(?:IMPS|NEFT|RTGS)[/-]\d+[/-]([^/\-|]+)/i,
-    // POS: POS/MERCHANT/...
-    /^POS[/-]([^/\-|]+)/i,
-    // ATM: ATM/...
-    /^(?:ATW|ATM)[/-]([^/\-|]+)/i,
-  ]
+  // 1. Standard Indian UPI Pattern: UPI/(CR|DR)/<ref>/<Name>/<Bank>/<VPA>/<Remark>
+  const upiFullMatch = trimmed.match(/UPI\/(?:CR|DR)\/\d+\/([^/]+)/i)
+  if (upiFullMatch && upiFullMatch[1]) {
+    const name = cleanMerchantName(upiFullMatch[1])
+    if (name) return name
+  }
 
-  for (const pattern of patterns) {
-    const match = narration.match(pattern)
-    if (match?.[1]) {
-      return match[1].trim().slice(0, 50)
+  // 2. UPI Pattern: UPI/<ref>/<Name>/... or UPI/<Name>/<ref>/...
+  const upiRefNameMatch = trimmed.match(/UPI\/\d+\/([^/]+)/i)
+  if (upiRefNameMatch && upiRefNameMatch[1]) {
+    const name = cleanMerchantName(upiRefNameMatch[1])
+    if (name) return name
+  }
+
+  const upiNameMatch = trimmed.match(/UPI\/([^/]+)/i)
+  if (upiNameMatch && upiNameMatch[1]) {
+    const candidate = upiNameMatch[1]
+    if (!/^\d+$/.test(candidate) && !/^(?:CR|DR)$/i.test(candidate)) {
+      const name = cleanMerchantName(candidate)
+      if (name) return name
     }
   }
 
-  // Fallback: take first meaningful part
-  const cleaned = narration
-    .replace(/[0-9]{6,}/g, '') // remove long numbers
-    .replace(/[|/\\]/g, ' ')
+  // 3. IMPS / NEFT / RTGS
+  const impsMatch = trimmed.match(/(?:IMPS|NEFT|RTGS)[/-](?:[A-Z0-9]+[/-])?([^/\-|]+)/i)
+  if (impsMatch && impsMatch[1]) {
+    const name = cleanMerchantName(impsMatch[1])
+    if (name) return name
+  }
+
+  // 4. POS / Card Transactions
+  const posMatch = trimmed.match(/POS\s+(?:\d+\s+)?([^/\-|]+)/i)
+  if (posMatch && posMatch[1]) {
+    const name = cleanMerchantName(posMatch[1])
+    if (name) return name
+  }
+
+  // 5. NACH / ACH / Auto-debit / Mandate
+  const achMatch = trimmed.match(/(?:ACH|NACH|ECS)[/-](?:[A-Z0-9]+[/-])?([^/\-|]+)/i)
+  if (achMatch && achMatch[1]) {
+    const name = cleanMerchantName(achMatch[1])
+    if (name) return name
+  }
+
+  // 6. Generic Fallback: strip dates, long account/ref numbers, prefixes
+  let cleaned = trimmed
+    .replace(/\b\d{2}[\/\-]\d{2}[\/\-]\d{2,4}\b/g, '') // remove dates
+    .replace(/^(?:WDL\s+TFR|DEP\s+TFR|TRANSFER\s+TO|TRANSFER\s+FROM|CHQ\s+TFR|BY\s+TRANSFER|TO\s+TRANSFER)\s+/i, '')
+    .replace(/\b[0-9]{6,}\b/g, '') // remove long numbers
+    .replace(/\b(?:AT\s+\d+|PEYADU|BRANCH|MUMBAI|DELHI|BANGALORE|CHENNAI)\b/gi, '') // remove branch/location artifacts
+    .replace(/[|/\\:]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
 
-  return cleaned.slice(0, 50)
+  return cleanMerchantName(cleaned.slice(0, 50))
+}
+
+function cleanMerchantName(raw: string): string {
+  let name = raw.replace(/[|/\\:]/g, ' ').replace(/\s+/g, ' ').trim()
+  if (/^Tata\s*Pla$/i.test(name)) return 'Tata Play'
+  if (/^Navi\s*Lim$/i.test(name)) return 'Navi Limited'
+  if (/^Kerala\s*S$/i.test(name)) return 'Kerala State'
+  return name.slice(0, 50)
 }
 
 export const DEFAULT_CATEGORIES = [

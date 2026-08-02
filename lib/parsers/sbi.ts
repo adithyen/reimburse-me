@@ -37,11 +37,11 @@ export class SBIParser implements IStatementParser {
     return SBI_DETECTION_KEYWORDS.some((kw) => lower.includes(kw))
   }
 
-  async parse(content: string, _options?: ParseOptions): Promise<ParseResult> {
+  async parse(content: string, options?: ParseOptions): Promise<ParseResult> {
     const warnings: string[] = []
     const errors: string[] = []
 
-    const isCsv = this.looksLikeCsv(content)
+    const isCsv = this.looksLikeCsv(content, options?.fileName)
 
     if (isCsv) {
       return this.parseCsv(content, warnings, errors)
@@ -50,9 +50,15 @@ export class SBIParser implements IStatementParser {
     }
   }
 
-  private looksLikeCsv(content: string): boolean {
-    const firstFewLines = content.split('\n').slice(0, 10).join('\n')
-    return (firstFewLines.match(/,/g) || []).length >= 5
+  private looksLikeCsv(content: string, fileName?: string): boolean {
+    if (fileName) {
+      const ext = fileName.split('.').pop()?.toLowerCase() || ''
+      if (ext === 'pdf') return false
+      if (['csv', 'xlsx', 'xls'].includes(ext)) return true
+    }
+    const lines = content.split('\n').map(l => l.trim()).filter(Boolean).slice(0, 30)
+    const tabularLines = lines.filter(l => (l.match(/,/g) || []).length >= 3)
+    return tabularLines.length >= 4
   }
 
   private parseCsv(content: string, warnings: string[], errors: string[]): ParseResult {
@@ -189,109 +195,189 @@ export class SBIParser implements IStatementParser {
 
   private parsePdfText(content: string, warnings: string[], errors: string[]): ParseResult {
     const transactions: CanonicalTransaction[] = []
-    const lines = content.split('\n')
+    const lines = content.split('\n').map((l) => l.trim()).filter(Boolean)
 
-    // SBI PDF has transaction lines in format:
-    // DD/MM/YYYY  NARRATION  REF  DEBIT  CREDIT  BALANCE  
-    // or they might span multiple lines
+    // SBI PDF has transaction lines anchored by dates.
+    // e.g. "26/07/2026     26/07/2026     -     -     2,000.00     4,485.99"
+    const DATE_LINE_RE = /^(\d{2}[\/\-]\d{2}[\/\-]\d{4})(?:\s+(\d{2}[\/\-]\d{2}[\/\-]\d{4}))?/
 
-    // Strategy: scan for date-anchored lines
-    const DATE_RE = /\b(\d{2}[\/\-]\d{2}[\/\-]\d{4})\b/
+    interface RawBlock {
+      date: Date
+      debit: number
+      credit: number
+      balance?: number
+      prefixLines: string[]
+      narrationLines: string[]
+    }
+
+    const blocks: RawBlock[] = []
+    let currentBlock: RawBlock | null = null
+    let pendingPrefix: string[] = []
 
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (!line) continue
+      const line = lines[i]
 
-      const dateMatch = line.match(DATE_RE)
-      if (!dateMatch) continue
-
-      const dateStr = dateMatch[1]
-      const date = parseDate(dateStr)
-      if (!date) continue
-
-      // Collect this line and the next line (SBI PDFs often split narration)
-      let fullContent = line
-      if (i + 1 < lines.length && !lines[i + 1].trim().match(DATE_RE)) {
-        const nextLine = lines[i + 1].trim()
-        if (nextLine && !nextLine.match(/^(date|txn|balance|narration)/i)) {
-          fullContent = line + ' ' + nextLine
-          i++ // skip next line
+      // Ignore headers / footers / summary sections
+      if (
+        line.includes('--- PAGE BREAK ---') ||
+        line.includes('Statement Summary') ||
+        line.includes('Page no.') ||
+        line.includes('STATEMENT OF ACCOUNT') ||
+        line.includes('State Bank of India') ||
+        line.startsWith('Account Number') ||
+        line.startsWith('CIF Number') ||
+        line.startsWith('Clear Balance') ||
+        line.startsWith('Uncleared Amount') ||
+        line.startsWith('Drawing Power') ||
+        line.startsWith('Statement From') ||
+        line.startsWith('Please do not share') ||
+        line.startsWith('This is a computer generated') ||
+        line.startsWith('Each depositor is insured')
+      ) {
+        if (currentBlock) {
+          blocks.push(currentBlock)
+          currentBlock = null
         }
+        pendingPrefix = []
+        continue
       }
 
-      // Extract all monetary amounts (numbers with decimal places)
-      const amounts = extractAmounts(fullContent)
-      if (amounts.length === 0) continue
+      const dateMatch = line.match(DATE_LINE_RE)
+      if (dateMatch) {
+        if (currentBlock) {
+          blocks.push(currentBlock)
+          currentBlock = null
+        }
 
-      // Remove the date from the content to get narration+amounts
-      const withoutDate = fullContent.replace(dateStr, '').trim()
-      
-      // The last 1-3 numbers are debit/credit/balance
-      let debit = 0, credit = 0, balance = 0
-      
-      if (amounts.length >= 3) {
-        balance = amounts[amounts.length - 1]
-        // Check if second-to-last is debit or credit based on balance direction
-        const prevBalance = getPreviousBalance(transactions)
-        if (prevBalance !== undefined) {
-          if (balance < prevBalance - 0.01) {
-            debit = amounts[amounts.length - 2]
-          } else if (balance > prevBalance + 0.01) {
-            credit = amounts[amounts.length - 2]
+        const dateStr = dateMatch[1]
+        const date = parseDate(dateStr)
+        if (!date) continue
+
+        // Strip dates from line to extract numbers
+        const withoutDates = line.replace(/^\d{2}[\/\-]\d{2}[\/\-]\d{4}(?:\s+\d{2}[\/\-]\d{2}[\/\-]\d{4})?/, '').trim()
+        const amountMatches = withoutDates.match(/\d{1,3}(?:,\d{3})*\.\d{2}/g) || []
+        const amounts = amountMatches.map((m) => parseAmount(m)).filter((n) => n > 0)
+
+        let debit = 0
+        let credit = 0
+        let balance: number | undefined
+
+        const hasPrefixDep = pendingPrefix.some((p) => p.includes('DEP') || p.includes('CR'))
+        const hasPrefixWdl = pendingPrefix.some((p) => p.includes('WDL') || p.includes('DR'))
+
+        if (amounts.length >= 2) {
+          balance = amounts[amounts.length - 1]
+          const txnAmt = amounts[amounts.length - 2]
+
+          const dashBefore = withoutDates.indexOf('-')
+          const amtPos = withoutDates.indexOf(amountMatches[amountMatches.length - 2])
+          const secondDash = withoutDates.indexOf('-', dashBefore + 1)
+
+          if (hasPrefixDep) {
+            credit = txnAmt
+          } else if (hasPrefixWdl) {
+            debit = txnAmt
+          } else if (secondDash !== -1 && amtPos > secondDash) {
+            credit = txnAmt
           } else {
-            debit = amounts[amounts.length - 2]
+            debit = txnAmt
           }
-        } else {
-          // Can't determine from context - check narration keywords
-          const lower = withoutDate.toLowerCase()
-          if (lower.includes('dr') || lower.includes('wdl') || lower.includes('upi/dr') || lower.includes('atm')) {
-            debit = amounts[amounts.length - 2]
-          } else if (lower.includes('cr') || lower.includes('dep') || lower.includes('upi/cr')) {
-            credit = amounts[amounts.length - 2]
+        } else if (amounts.length === 1) {
+          if (hasPrefixDep) {
+            credit = amounts[0]
           } else {
-            debit = amounts[amounts.length - 2]
+            debit = amounts[0]
           }
         }
-      } else if (amounts.length === 2) {
-        balance = amounts[1]
-        // Check narration for type hint
-        const lower = withoutDate.toLowerCase()
-        if (lower.includes('cr') || lower.includes('dep') || lower.includes('upi/cr')) {
-          credit = amounts[0]
-        } else {
-          debit = amounts[0]
+
+        // Check if there is narration text embedded on this same line (before amounts)
+        const sameLineNarration = withoutDates
+          .replace(/\d{1,3}(?:,\d{3})*\.\d{2}/g, '')
+          .replace(/^[-|\s]+/, '')
+          .replace(/[-|\s]+$/, '')
+          .trim()
+
+        currentBlock = {
+          date,
+          debit,
+          credit,
+          balance,
+          prefixLines: [...pendingPrefix],
+          narrationLines: sameLineNarration ? [sameLineNarration] : [],
         }
-      } else if (amounts.length === 1) {
-        const lower = withoutDate.toLowerCase()
-        if (lower.includes('cr') || lower.includes('dep') || lower.includes('upi/cr')) {
-          credit = amounts[0]
-        } else {
-          debit = amounts[0]
-        }
+        pendingPrefix = []
+        continue
       }
 
-      if (debit === 0 && credit === 0) continue
+      // Check for standalone prefixes (e.g. "WDL TFR", "DEP TFR", "TRANSFER TO", "CHQ TFR")
+      if (
+        line === 'WDL TFR' ||
+        line === 'DEP TFR' ||
+        line === 'TRANSFER' ||
+        line === 'TRANSFER TO' ||
+        line === 'TRANSFER FROM' ||
+        line === 'CHQ TFR' ||
+        line === 'BY TRANSFER' ||
+        line === 'TO TRANSFER'
+      ) {
+        if (currentBlock) {
+          blocks.push(currentBlock)
+          currentBlock = null
+        }
+        pendingPrefix = [line]
+        continue
+      }
 
-      const amount = debit > 0 ? debit : credit
-      const type: 'DEBIT' | 'CREDIT' = debit > 0 ? 'DEBIT' : 'CREDIT'
+      // If inside a transaction block, collect narration lines
+      if (currentBlock) {
+        // Stop if metadata line
+        if (
+          line.startsWith('Balance') ||
+          line.startsWith('Account open Date') ||
+          line.startsWith('Nominee Name')
+        ) {
+          blocks.push(currentBlock)
+          currentBlock = null
+          pendingPrefix = []
+          continue
+        }
 
-      // Extract narration: text before the first amount
-      const narration = extractNarrationFromLine(withoutDate, amounts[0])
+        currentBlock.narrationLines.push(line)
+      } else {
+        // Collect line if it looks like a prefix or narration starter
+        if (line.includes('TFR') || line.includes('UPI') || line.includes('NEFT') || line.includes('IMPS')) {
+          pendingPrefix.push(line)
+        }
+      }
+    }
 
-      const { categorySlug, confidence } = categorizeTransaction(narration)
-      const merchant = extractMerchant(narration)
+    if (currentBlock) {
+      blocks.push(currentBlock)
+    }
+
+    // Convert blocks to CanonicalTransactions
+    for (const b of blocks) {
+      if (b.debit === 0 && b.credit === 0) continue
+
+      const amount = b.debit > 0 ? b.debit : b.credit
+      const type: 'DEBIT' | 'CREDIT' = b.debit > 0 ? 'DEBIT' : 'CREDIT'
+
+      const allNarrationParts = [...b.prefixLines, ...b.narrationLines].filter(Boolean)
+      const rawNarration = allNarrationParts.join(' ').replace(/\s+/g, ' ').trim()
+
+      const merchant = extractMerchant(rawNarration)
+      const { categorySlug, confidence } = categorizeTransaction(rawNarration)
 
       transactions.push({
-        date,
-        rawNarration: narration.trim(),
-        merchant,
+        date: b.date,
+        rawNarration,
+        merchant: merchant || (rawNarration ? rawNarration.slice(0, 50) : 'Transaction'),
         amount,
         type,
-        runningBalance: balance || undefined,
-        bankTxnId: extractRefNumber(narration),
+        runningBalance: b.balance,
+        bankTxnId: extractRefNumber(rawNarration),
         categorySlug,
-        confidence: confidence * 0.85,
-        parseWarning: amounts.length === 1 ? 'Single amount found — type may need verification' : undefined,
+        confidence: confidence * 0.9,
       })
     }
 

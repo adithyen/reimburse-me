@@ -465,12 +465,13 @@ function extractAmountsFromLine(str: string): number[] {
 }
 
 function extractNarrationFromPdfLine(line: string, dateStr: string, amounts: number[]): string {
-  let s = line.replace(dateStr, '').trim()
+  // Strip all dates (including value date if present)
+  let s = line.replace(/\b\d{2}[\/\-]\d{2}[\/\-]\d{2,4}\b/g, ' ').trim()
   // Remove trailing amounts
   for (const amt of amounts) {
     s = s.replace(amt.toFixed(2), '').replace(amt.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','), '')
   }
-  s = s.replace(/\s{2,}/g, ' ').trim()
+  s = s.replace(/^[-|\s]+/, '').replace(/[-|\s]+$/, '').replace(/\s{2,}/g, ' ').trim()
   // Remove trailing numbers
   s = s.replace(/[\d,\.]+\s*$/, '').trim()
   return s.slice(0, 120) || line.slice(0, 80)

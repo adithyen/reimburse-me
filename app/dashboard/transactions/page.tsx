@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Upload, Filter, Search, ArrowUpCircle, ArrowDownCircle, Tag, CheckSquare,
   Square, UserPlus, AlertTriangle, RefreshCw, X, ChevronDown, Inbox,
-  List, SlidersHorizontal, Plus,
+  List, SlidersHorizontal, Plus, Trash2,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -64,6 +64,14 @@ export default function TransactionsPage() {
   const [personalTxn, setPersonalTxn] = useState<string | null>(null)
   const [page, setPage] = useState(1)
 
+  // Delete confirmation state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: 'single' | 'selected' | 'all'
+    id?: string
+    count?: number
+  } | null>(null)
+
   const { importModalOpen, setImportModalOpen } = useUIStore()
 
   const filters = tab === 'inbox'
@@ -109,6 +117,8 @@ export default function TransactionsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['debts'] })
+      queryClient.invalidateQueries({ queryKey: ['people-list'] })
       toast.success('Transaction assigned!')
       setAssignSheetOpen(false)
       setAssigningTxn(null)
@@ -118,8 +128,6 @@ export default function TransactionsPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
-  
-
   const unassignMutation = useMutation({
     mutationFn: async (txnId: string) => {
       const res = await fetch(`/api/transactions/${txnId}/unassign`, { method: 'POST' })
@@ -128,9 +136,50 @@ export default function TransactionsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['debts'] })
+      queryClient.invalidateQueries({ queryKey: ['people-list'] })
       toast.success('Transaction unassigned')
     },
   })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (target: { type: 'single' | 'selected' | 'all'; id?: string }) => {
+      if (target.type === 'single' && target.id) {
+        const res = await fetch(`/api/transactions/${target.id}`, { method: 'DELETE' })
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed to delete transaction')
+        return res.json()
+      } else if (target.type === 'selected') {
+        const ids = Array.from(selectedIds)
+        const res = await fetch('/api/transactions', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids }),
+        })
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed to delete transactions')
+        return res.json()
+      } else if (target.type === 'all') {
+        const res = await fetch('/api/transactions', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deleteAll: true }),
+        })
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed to delete all transactions')
+        return res.json()
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['debts'] })
+      queryClient.invalidateQueries({ queryKey: ['people-list'] })
+      toast.success('Transaction(s) deleted successfully')
+      setDeleteModalOpen(false)
+      setDeleteTarget(null)
+      setSelectedIds(new Set())
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   const transactions: Transaction[] = data?.data || []
   const meta = data?.meta || { total: 0, unassignedCount: 0 }
 
@@ -144,7 +193,6 @@ export default function TransactionsPage() {
   }
 
   const handleBulkAssign = (personId: string) => {
-    // Assign all selected transactions
     const ids = Array.from(selectedIds)
     Promise.all(ids.map((txnId) => assignMutation.mutateAsync({ txnId, personId })))
       .then(() => {
@@ -166,6 +214,22 @@ export default function TransactionsPage() {
     setEditLabelOpen(true)
   }
 
+  const handleDeleteSingle = (id: string) => {
+    setDeleteTarget({ type: 'single', id, count: 1 })
+    setDeleteModalOpen(true)
+  }
+
+  const handleDeleteSelected = () => {
+    if (selectedIds.size === 0) return
+    setDeleteTarget({ type: 'selected', count: selectedIds.size })
+    setDeleteModalOpen(true)
+  }
+
+  const handleDeleteAll = () => {
+    setDeleteTarget({ type: 'all', count: meta.total })
+    setDeleteModalOpen(true)
+  }
+
   return (
     <div className="space-y-5 max-w-5xl">
       {/* Header */}
@@ -178,7 +242,18 @@ export default function TransactionsPage() {
             </p>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {meta.total > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 hover:border-destructive"
+              onClick={handleDeleteAll}
+              title="Delete all transactions to re-import fresh"
+            >
+              <Trash2 className="h-4 w-4" /> Clear All
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -232,6 +307,14 @@ export default function TransactionsPage() {
               >
                 <UserPlus className="h-3.5 w-3.5" /> Assign Selected
               </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="text-xs gap-1 bg-red-600/90 hover:bg-red-700 text-white border-0"
+                onClick={handleDeleteSelected}
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete Selected ({selectedIds.size})
+              </Button>
               <button
                 onClick={() => setSelectedIds(new Set())}
                 className="text-xs text-white/80 hover:text-white underline ml-2"
@@ -271,6 +354,7 @@ export default function TransactionsPage() {
             onEditLabel={handleOpenEditLabel}
             onMarkPersonal={(txnId) => { setPersonalTxn(txnId); setPersonalSheetOpen(true) }}
             onUnassign={(txnId) => unassignMutation.mutate(txnId)}
+            onDelete={handleDeleteSingle}
             showAssignActions
           />
         </TabsContent>
@@ -285,6 +369,7 @@ export default function TransactionsPage() {
             onEditLabel={handleOpenEditLabel}
             onMarkPersonal={(txnId) => { setPersonalTxn(txnId); setPersonalSheetOpen(true) }}
             onUnassign={(txnId) => unassignMutation.mutate(txnId)}
+            onDelete={handleDeleteSingle}
             showAssignActions={false}
           />
         </TabsContent>
@@ -298,6 +383,59 @@ export default function TransactionsPage() {
           <Button variant="outline" size="sm" disabled={page >= meta.totalPages} onClick={() => setPage(p => p + 1)}>Next</Button>
         </div>
       )}
+
+      {/* Delete Confirmation Warning Dialog */}
+      <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+        <DialogContent className="sm:max-w-md p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Confirm Deletion
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-foreground">
+              {deleteTarget?.type === 'all'
+                ? 'Are you sure you want to delete ALL transactions from your account?'
+                : deleteTarget?.type === 'selected'
+                ? `Are you sure you want to delete ${deleteTarget.count} selected transaction(s)?`
+                : 'Are you sure you want to delete this transaction?'}
+            </p>
+            <div className="p-3.5 rounded-xl bg-destructive/10 border border-destructive/20 text-xs text-destructive flex items-start gap-2.5">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <strong className="block font-semibold">⚠️ Cause & Impact Warning:</strong>
+                <p className="leading-relaxed">
+                  Deleting transaction(s) will permanently remove them along with any associated <strong>debt assignments</strong>, <strong>reimbursement calculations</strong>, and <strong>custom labels</strong>.
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  You can re-import your bank statement anytime to start fresh.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteModalOpen(false)}
+              disabled={deleteMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget)}
+              disabled={deleteMutation.isPending}
+              className="gap-1.5 bg-red-600 hover:bg-red-700 text-white"
+            >
+              <Trash2 className="h-4 w-4" />
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete Permanently'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Assign Dialog */}
       <Dialog open={assignSheetOpen} onOpenChange={setAssignSheetOpen}>
@@ -404,7 +542,7 @@ export default function TransactionsPage() {
 }
 
 function TransactionList({
-  transactions, isLoading, selectedIds, onToggleSelect, onAssign, onEditLabel, onMarkPersonal, onUnassign, showAssignActions,
+  transactions, isLoading, selectedIds, onToggleSelect, onAssign, onEditLabel, onMarkPersonal, onUnassign, onDelete, showAssignActions,
 }: {
   transactions: Transaction[]
   isLoading: boolean
@@ -414,6 +552,7 @@ function TransactionList({
   onEditLabel: (txn: Transaction) => void
   onMarkPersonal: (id: string) => void
   onUnassign: (id: string) => void
+  onDelete: (id: string) => void
   showAssignActions: boolean
 }) {
   if (isLoading) {
@@ -562,6 +701,13 @@ function TransactionList({
                   Edit Labels
               </button>
             ) : null}
+            <button
+              onClick={() => onDelete(txn.id)}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-destructive hover:bg-destructive/15 transition-colors"
+              title="Delete Transaction"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
           </div>
 
           {/* Status badge */}

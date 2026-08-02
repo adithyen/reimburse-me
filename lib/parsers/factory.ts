@@ -94,7 +94,7 @@ export class StatementParserFactory {
       parser = PARSERS.find((p) => p.canParse(textContent, fileName)) || PARSERS[PARSERS.length - 1]
     }
 
-    return parser.parse(textContent, options)
+    return parser.parse(textContent, { ...options, fileName })
   }
 
   static getParserList(): Array<{ name: string; bankName: string }> {
