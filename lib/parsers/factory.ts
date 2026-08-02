@@ -1,7 +1,7 @@
 /**
  * Statement Parser Factory
  * Detects bank from file content/metadata and returns the appropriate parser.
- * Uses pdfjs-dist for PDF text extraction and xlsx for Excel.
+ * Uses unpdf for serverless/edge-safe PDF text extraction and xlsx for Excel.
  */
 
 import { IStatementParser, FileDetectionResult, BankName, ParseResult, ParseOptions } from './types'
@@ -123,8 +123,13 @@ function detectBank(content: string): { bank: BankName; confidence: number } {
 
 function detectPasswordProtectedPdf(buffer: Buffer): boolean {
   try {
-    const header = buffer.toString('latin1', 0, Math.min(buffer.length, 4096))
-    return header.includes('/Encrypt') || header.includes('/EncryptMetadata')
+    const header = buffer.toString('latin1', 0, Math.min(buffer.length, 8192))
+    if (header.includes('/Encrypt')) return true
+    if (buffer.length > 8192) {
+      const trailer = buffer.toString('latin1', buffer.length - 8192)
+      if (trailer.includes('/Encrypt')) return true
+    }
+    return false
   } catch {
     return false
   }
@@ -176,43 +181,21 @@ export async function parseExcelToText(buffer: Buffer, password?: string): Promi
   return csvParts.join('\n')
 }
 
-// ---- PDF text extraction (server-side) using pdfjs-dist ----
+// ---- PDF text extraction using unpdf (serverless & edge safe) ----
 
 export async function extractPdfText(buffer: Buffer, password?: string): Promise<string> {
-  // Check if encrypted first
+  // If we already detect encryption header and no password was provided, ask upfront
   if (detectPasswordProtectedPdf(buffer) && !password) {
     throw new Error('NEEDS_PASSWORD')
   }
 
   try {
-    // Use pdfjs-dist for reliable extraction
-    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs' as any).catch(() =>
-      import('pdfjs-dist' as any)
-    )
+    const { getResolvedPDFJS } = await import('unpdf')
+    const { getDocument } = await getResolvedPDFJS()
 
-    const pdfjsMod = pdfjsLib.default || pdfjsLib
-
-    // Set valid file:/// workerSrc for pdfjs-dist ESM loader compatibility
-    if (pdfjsMod.GlobalWorkerOptions) {
-      try {
-        const { pathToFileURL } = require('url')
-        const workerPath = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')
-        pdfjsMod.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href
-      } catch {
-        try {
-          const { pathToFileURL } = require('url')
-          const workerPath = require.resolve('pdfjs-dist/build/pdf.worker.mjs')
-          pdfjsMod.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href
-        } catch {
-          // Fallback
-        }
-      }
-    }
-
-    const loadingTask = pdfjsMod.getDocument({
+    const loadingTask = getDocument({
       data: new Uint8Array(buffer),
       ...(password ? { password } : {}),
-      isEvalSupported: false,
       useSystemFonts: true,
     })
 
@@ -222,14 +205,13 @@ export async function extractPdfText(buffer: Buffer, password?: string): Promise
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i)
       const textContent = await page.getTextContent()
-      // Join items preserving spatial layout by adding spaces between tokens
       const items = textContent.items as Array<{ str: string; transform: number[]; width: number }>
       
       // Group by Y coordinate to reconstruct lines
       const lineMap = new Map<number, Array<{ x: number; str: string }>>()
       for (const item of items) {
         if (!item.str) continue
-        const y = Math.round(item.transform[5]) // Y position (rounded)
+        const y = Math.round(item.transform[5]) // Y position
         if (!lineMap.has(y)) lineMap.set(y, [])
         lineMap.get(y)!.push({ x: item.transform[4], str: item.str })
       }
@@ -246,10 +228,23 @@ export async function extractPdfText(buffer: Buffer, password?: string): Promise
     }
 
     return pages.join('\n\n--- PAGE BREAK ---\n\n')
-  } catch (e) {
-    const msg = String(e).toLowerCase()
-    if (msg.includes('password') || msg.includes('encrypted') || msg.includes('badresponseer')) {
-      if (!password) throw new Error('NEEDS_PASSWORD')
+  } catch (e: any) {
+    const msg = String(e?.message || e || '').toLowerCase()
+    const name = String(e?.name || '').toLowerCase()
+    const code = e?.code
+
+    // PDF.js PasswordException codes: 1 = NEED_PASSWORD, 2 = INCORRECT_PASSWORD
+    if (
+      name.includes('password') ||
+      msg.includes('password') ||
+      msg.includes('encrypted') ||
+      msg.includes('badresponseer') ||
+      code === 1 ||
+      code === 2
+    ) {
+      if (!password) {
+        throw new Error('NEEDS_PASSWORD')
+      }
       throw new Error('WRONG_PASSWORD')
     }
     throw e
