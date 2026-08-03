@@ -19,7 +19,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         include: {
           category: true,
           debtTransactions: {
-            include: { transaction: true },
+            include: {
+              transaction: {
+                include: {
+                  personalLabels: true,
+                  category: true,
+                },
+              },
+            },
           },
           settlements: { orderBy: { settledAt: 'desc' } },
         },
